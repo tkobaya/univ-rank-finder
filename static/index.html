@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>University Rank Finder</title>
+<style>
+  :root { --accent:#b22222; --muted:#6b7280; --border:#e5e7eb; }
+  * { box-sizing: border-box; }
+  body { font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", sans-serif;
+         margin:0; color:#111; background:#fafafa; }
+  header { background:#111; color:#fff; padding:18px 24px; }
+  header h1 { margin:0; font-size:20px; }
+  header .sub { color:#bbb; font-size:12px; margin-top:4px; }
+  main { max-width:1200px; margin:0 auto; padding:20px 24px 60px; }
+  .filters { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin:16px 0;
+             background:#fff; border:1px solid var(--border); border-radius:8px; padding:14px 16px; }
+  .filters input, .filters select { padding:7px 10px; border:1px solid var(--border);
+             border-radius:6px; font-size:13px; background:#fff; }
+  .filters label { font-size:12px; color:var(--muted); margin-right:4px; }
+  .card { background:#fff; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--border); }
+  th { background:#f3f4f6; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:#374151; }
+  tr:hover td { background:#f9fafb; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+  .badge.qs { background:#ffe9d6; color:#c2410c; }
+  .badge.the { background:#e0e7ff; color:#3730a3; }
+  .badge.arwu { background:#dcfce7; color:#15803d; }
+  .rank-num { font-weight:700; }
+  .muted { color:var(--muted); }
+  a { color:var(--accent); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  .pager { display:flex; gap:8px; margin:14px 0; align-items:center; }
+  .pager button { padding:6px 12px; border:1px solid var(--border); background:#fff; border-radius:6px; cursor:pointer; }
+  .pager button:disabled { opacity:.4; cursor:default; }
+  .tabs { display:flex; gap:4px; margin-top:8px; }
+  .tabs button { border:1px solid var(--border); background:#fff; padding:8px 16px; border-radius:8px 8px 0 0;
+                 cursor:pointer; font-size:13px; }
+  .tabs button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .empty { padding:30px; text-align:center; color:var(--muted); }
+  #loading { text-align:center; padding:40px; color:var(--muted); }
+  th .th-btn { background:none; border:none; font:inherit; color:inherit; letter-spacing:inherit;
+               text-transform:uppercase; padding:0; cursor:pointer; }
+  th .th-btn:hover { color:var(--accent); }
+  th .th-btn.active { color:var(--accent); }
+  th .th-btn .arrow { font-size:9px; margin-left:2px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>University Rank Finder</h1>
+  <div class="sub" id="header-sub">読み込み中...</div>
+</header>
+<main>
+  <div class="tabs">
+    <button id="tab-universities" class="active">大学一覧 (ROR 一致)</button>
+    <button id="tab-rankings">ランキング生データ</button>
+  </div>
+
+  <div class="filters" id="filters">
+    <div><label>検索</label><input id="f-q" placeholder="大学名" /></div>
+    <div><label>国</label><select id="f-country"><option value="">すべて</option></select></div>
+    <div><label>ソース</label>
+      <select id="f-source"><option value="">すべて</option><option value="qs">QS</option><option value="the">THE</option><option value="arwu">ARWU</option></select>
+    </div>
+    <div><label>年度</label><select id="f-year"><option value="">すべて</option></select></div>
+    <div><label>ソート</label>
+      <select id="f-sort"><option value="name">名前</option><option value="country">国</option>
+      <option value="rank">順位</option><option value="rank:qs">QS 順位</option><option value="rank:the">THE 順位</option>
+      <option value="rank:arwu">ARWU 順位</option><option value="matches">ランキング数</option></select>
+    </div>
+    <div><label><input type="checkbox" id="f-matched" />ランキング一致のみ</label></div>
+    <button id="btn-apply" style="padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer">適用</button>
+  </div>
+
+  <div id="loading">読み込み中...</div>
+
+  <div id="panel-universities">
+    <div class="card"><table>
+      <thead><tr>
+        <th>#</th>
+        <th><button class="th-btn" data-sort="name">大学 (RoR)<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="country">国<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="rank:qs">QS 順位<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="rank:the">THE 順位<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="rank:arwu">ARWU 順位<span class="arrow"></span></button></th>
+        <th>リンク</th>
+      </tr></thead>
+      <tbody id="uni-body"></tbody>
+    </table></div>
+    <div class="pager" id="uni-pager">
+      <button id="uni-prev">← 前</button>
+      <span id="uni-info" class="muted"></span>
+      <button id="uni-next">次 →</button>
+    </div>
+  </div>
+
+  <div id="panel-rankings" style="display:none">
+    <div class="card"><table>
+      <thead><tr>
+        <th><button class="th-btn" data-sort="source">ソース<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="year">年度<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="rank">順位<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="org_name">大学名<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="country">国<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="score">スコア<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="match_status">RoR 一致<span class="arrow"></span></button></th>
+      </tr></thead>
+      <tbody id="rank-body"></tbody>
+    </table></div>
+    <div class="pager" id="rank-pager">
+      <button id="rank-prev">← 前</button>
+      <span id="rank-info" class="muted"></span>
+      <button id="rank-next">次 →</button>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const state = {
+  tab: "universities", uniPage: 0, rankPage: 0, pageSize: 100,
+  uniSort: "name", uniOrder: "asc", rankSort: "rank", rankOrder: "asc",
+};
+
+async function getJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function loadStats() {
+  const s = await getJSON("/api/stats");
+  const parts = [];
+  const ror = s.datasets.find((d) => d.name === "ror");
+  if (ror) parts.push(`RoR ${ror.version} (${ror.published_at ?? ""}) ${ror.record_count.toLocaleString()} 件`);
+  for (const [src, arr] of Object.entries(s.rankings_by_source)) {
+    for (const a of arr) parts.push(`${src.toUpperCase()} ${a.year}: ${a.count} 件`);
+  }
+  parts.push(`一致 ${s.rankings.matched}/${s.rankings.total}`);
+  $("#header-sub").textContent = parts.join(" ・ ");
+}
+
+async function loadCountries() {
+  const c = await getJSON("/api/countries");
+  const sel = $("#f-country");
+  for (const name of c.items) {
+    const opt = document.createElement("option");
+    opt.value = name; opt.textContent = name;
+    sel.appendChild(opt);
+  }
+}
+
+async function loadYears() {
+  const s = await getJSON("/api/stats");
+  const years = new Set();
+  for (const arr of Object.values(s.rankings_by_source)) for (const a of arr) years.add(a.year);
+  const sel = $("#f-year");
+  for (const y of [...years].sort((a, b) => b - a)) {
+    const opt = document.createElement("option");
+    opt.value = y; opt.textContent = y;
+    sel.appendChild(opt);
+  }
+}
+
+function rankBadge(rankings, source) {
+  const rows = rankings.filter((r) => r.source === source);
+  if (!rows.length) return '<span class="muted">-</span>';
+  return rows.map((r) =>
+    `<span class="badge ${source}">${source.toUpperCase()} ${r.year}</span> <span class="rank-num">${r.rank_display || "?"}</span>`
+  ).join("<br>");
+}
+
+async function loadUniversities() {
+  $("#loading").style.display = "block";
+  $("#panel-rankings").style.display = "none";
+  $("#panel-universities").style.display = "none";
+  try {
+    const params = new URLSearchParams({
+      q: $("#f-q").value, country: $("#f-country").value, source: $("#f-source").value,
+      year: $("#f-year").value, sort: state.uniSort, order: state.uniOrder,
+      matched_only: $("#f-matched").checked ? "true" : "false",
+      limit: state.pageSize, offset: state.uniPage * state.pageSize,
+    });
+    const d = await getJSON("/api/universities?" + params);
+    const body = $("#uni-body");
+    body.innerHTML = "";
+    d.items.forEach((u, i) => {
+      const tr = document.createElement("tr");
+      const rorLink = `<a href="https://ror.org/${u.ror_id}" target="_blank" rel="noopener">${escapeHtml(u.name)}</a>`;
+      tr.innerHTML = `
+        <td>${state.uniPage * state.pageSize + i + 1}</td>
+        <td>${rorLink}</td>
+        <td>${escapeHtml(u.country || "-")}</td>
+        <td>${rankBadge(u.rankings, "qs")}</td>
+        <td>${rankBadge(u.rankings, "the")}</td>
+        <td>${rankBadge(u.rankings, "arwu")}</td>
+        <td>${u.website ? `<a href="${escapeHtml(u.website)}" target="_blank" rel="noopener">web</a>` : ""}</td>`;
+      body.appendChild(tr);
+    });
+    if (!d.items.length) body.innerHTML = '<tr><td colspan="7"><div class="empty">該当なし</div></td></tr>';
+    const total = d.total || d.items.length;
+    $("#uni-info").textContent = `${state.uniPage * state.pageSize + 1}-${Math.min((state.uniPage + 1) * state.pageSize, total)} / ${total}`;
+    $("#uni-prev").disabled = state.uniPage === 0;
+    $("#uni-next").disabled = (state.uniPage + 1) * state.pageSize >= total;
+  } catch (e) {
+    $("#uni-body").innerHTML = `<tr><td colspan="7" class="empty">エラー: ${e.message}</td></tr>`;
+  } finally {
+    $("#loading").style.display = "none";
+    $("#panel-universities").style.display = "block";
+  }
+}
+
+async function loadRankings() {
+  $("#loading").style.display = "block";
+  $("#panel-universities").style.display = "none";
+  $("#panel-rankings").style.display = "none";
+  try {
+    const params = new URLSearchParams({
+      q: $("#f-q").value, source: $("#f-source").value, year: $("#f-year").value,
+      sort: state.rankSort, order: state.rankOrder,
+      limit: state.pageSize, offset: state.rankPage * state.pageSize,
+    });
+    const d = await getJSON("/api/rankings?" + params);
+    const body = $("#rank-body");
+    body.innerHTML = "";
+    d.items.forEach((r) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><span class="badge ${r.source}">${r.source.toUpperCase()}</span></td>
+        <td>${r.year}</td>
+        <td class="rank-num">${escapeHtml(r.rank_display)}</td>
+        <td>${r.university ? `<a href="https://ror.org/${r.university.ror_id}" target="_blank" rel="noopener">${escapeHtml(r.org_name)}</a>` : escapeHtml(r.org_name)}</td>
+        <td>${escapeHtml(r.country || "-")}</td>
+        <td>${escapeHtml(r.score || "-")}</td>
+        <td>${r.university ? `✓ ${escapeHtml(r.university.name)}` : `<span class="muted">${escapeHtml(r.match_status)}</span>`}</td>`;
+      body.appendChild(tr);
+    });
+    if (!d.items.length) body.innerHTML = '<tr><td colspan="7"><div class="empty">該当なし</div></td></tr>';
+    const total = d.total || d.items.length;
+    $("#rank-info").textContent = `${state.rankPage * state.pageSize + 1}-${Math.min((state.rankPage + 1) * state.pageSize, total)} / ${total}`;
+    $("#rank-prev").disabled = state.rankPage === 0;
+    $("#rank-next").disabled = (state.rankPage + 1) * state.pageSize >= total;
+  } catch (e) {
+    $("#rank-body").innerHTML = `<tr><td colspan="7" class="empty">エラー: ${e.message}</td></tr>`;
+  } finally {
+    $("#loading").style.display = "none";
+    $("#panel-rankings").style.display = "block";
+  }
+}
+
+function render() {
+  updateSortIndicators();
+  if (state.tab === "universities") loadUniversities(); else loadRankings();
+}
+
+function onHeaderClick(e) {
+  const btn = e.target.closest(".th-btn");
+  if (!btn) return;
+  const sort = btn.dataset.sort;
+  const isUni = state.tab === "universities";
+  if (isUni) {
+    if (state.uniSort === sort) state.uniOrder = state.uniOrder === "asc" ? "desc" : "asc";
+    else { state.uniSort = sort; state.uniOrder = "asc"; }
+    $("#f-sort").value = sort;
+    state.uniPage = 0;
+  } else {
+    if (state.rankSort === sort) state.rankOrder = state.rankOrder === "asc" ? "desc" : "asc";
+    else { state.rankSort = sort; state.rankOrder = "asc"; }
+    state.rankPage = 0;
+  }
+  render();
+}
+
+function updateSortIndicators() {
+  const isUni = state.tab === "universities";
+  const sort = isUni ? state.uniSort : state.rankSort;
+  const order = isUni ? state.uniOrder : state.rankOrder;
+  document.querySelectorAll(".th-btn").forEach((b) => {
+    const active = b.dataset.sort === sort;
+    b.classList.toggle("active", active);
+    b.querySelector(".arrow").textContent = active ? (order === "asc" ? "▲" : "▼") : "";
+  });
+}
+
+document.querySelectorAll("thead").forEach((h) => h.addEventListener("click", onHeaderClick));
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+$("#tab-universities").onclick = () => {
+  state.tab = "universities";
+  $("#tab-universities").classList.add("active");
+  $("#tab-rankings").classList.remove("active");
+  render();
+};
+$("#tab-rankings").onclick = () => {
+  state.tab = "rankings";
+  $("#tab-rankings").classList.add("active");
+  $("#tab-universities").classList.remove("active");
+  render();
+};
+$("#btn-apply").onclick = () => {
+  state.uniSort = $("#f-sort").value;
+  state.uniOrder = "asc";
+  state.uniPage = 0; state.rankPage = 0;
+  render();
+};
+$("#f-q").addEventListener("keydown", (e) => { if (e.key === "Enter") { state.uniPage = 0; state.rankPage = 0; render(); } });
+$("#uni-prev").onclick = () => { state.uniPage--; loadUniversities(); };
+$("#uni-next").onclick = () => { state.uniPage++; loadUniversities(); };
+$("#rank-prev").onclick = () => { state.rankPage--; loadRankings(); };
+$("#rank-next").onclick = () => { state.rankPage++; loadRankings(); };
+
+(async () => {
+  await Promise.all([loadStats(), loadCountries(), loadYears()]);
+  render();
+})();
+</script>
+</body>
+</html>
