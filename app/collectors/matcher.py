@@ -201,6 +201,10 @@ class UniversityMatcher:
         if hit:
             return hit, STATUS_MATCHED
 
+        hit = self._acronym_fuzzy(norm, cc)
+        if hit:
+            return hit, STATUS_MATCHED
+
         hit = self._prefix(norm, cc)
         if hit:
             return hit, STATUS_MATCHED
@@ -262,6 +266,36 @@ class UniversityMatcher:
             hits.append(u)
         if len(hits) == 1:
             return hits[0]
+        return None
+
+    def _acronym_fuzzy(self, norm: str, cc: str | None):
+        """アクロニム + 都市名など (例: "LMU Munich", "ETH Zurich") を低めのファジー閾値で照合。
+
+        クエリに含まれるアクロニムが単一の ROR 組織に解決し、
+        その組織のいずれかの表記と 0.85 以上の類似度で一致すれば返す。
+        """
+        tokens = set(norm.split())
+        acr_tokens = [t for t in tokens if t in self._acronym_index]
+        if not acr_tokens:
+            return None
+        hits = []
+        for t in acr_tokens:
+            for rid in self._acronym_index[t]:
+                u = self._by_ror[rid]
+                if cc and u.country_code and u.country_code != cc:
+                    continue
+                if u not in hits:
+                    hits.append(u)
+        if len(hits) != 1:
+            return None
+        u = hits[0]
+        best = 0.0
+        for n in u.search_names:
+            un = normalize_name(n)
+            if un:
+                best = max(best, SequenceMatcher(None, norm, un).ratio())
+        if best >= 0.85:
+            return u
         return None
 
     def _prefix(self, norm: str, cc: str | None):
