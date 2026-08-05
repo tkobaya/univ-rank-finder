@@ -412,8 +412,10 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "ROR organization ID (e.g. 05591te55)",
               "title": "Ror Id"
-            }
+            },
+            "description": "ROR organization ID (e.g. 05591te55)"
           },
           {
             "name": "source",
@@ -465,6 +467,9 @@
                 "schema": {}
               }
             }
+          },
+          "404": {
+            "description": "ROR organization not found"
           },
           "422": {
             "description": "Validation Error",

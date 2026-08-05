@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BeforeValidator
 from sqlalchemy import String, asc, cast, desc, func, select
 from sqlalchemy.orm import Session
@@ -273,9 +273,10 @@ def list_universities(
         "Returns a single ROR university identified by its ROR ID, together with the rankings (QS / THE / ARWU) "
         "matched to it across all sources and years. Optionally filter the rankings by source or year."
     ),
+    responses={404: {"description": "ROR organization not found"}},
 )
 def get_university(
-    ror_id: str,
+    ror_id: Annotated[str, Path(description="ROR organization ID (e.g. 05591te55)")],
     source: str | None = Query(default=None, choices=["qs", "the", "arwu"], description="Only include rankings from this source"),
     year: YearParam = None,
     db: Session = Depends(get_db),
