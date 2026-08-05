@@ -68,20 +68,31 @@ DB は SQLite (`data/university_rankings.db`)。`data/*.db` は .gitignore 済�
 - rank/score ソートは未順位 (NULL) が先頭に来る → `_sort_rank` で asc/desc とも NULL を常に末尾へ。
 - `/api/universities` の sort オプション: `name / country / rank / rank:qs / rank:the / rank:arwu / matches`、
   `order=asc|desc`。`/api/rankings` は `source / year / rank / org_name / country / score / match_status`。
+- `/api/ror/search`: 純粋な RoR 検索 (ランキング不使用)。q (必須) / country / limit。関連度順
+  (正式名完全一致 > 別名・略称完全一致 > 前方一致 > 部分一致)。Validator/ピッカー用途。
+- `/api/universities/{ror_id}`: ROR ID で大学 1 件 + 一致ランキング (全ソース) を取得。source / year で絞り込み可、未存在は 404。
 - クエリ: `q`, `country`, `source`, `year`, `match_status`, `matched_only` (デフォルト false)、
   `limit` (default 100/200, le=1000), `offset`。
 
 ## Web UI (`static/index.html`)
 
-- 2 タブ (ランキング一覧 / 大学一覧)。**タブ切替時に両パネルをトグルする実装**。
-- 両タブの列ヘッダーはソートボタン (▲/▼・アクティブ強調・`f-sort` ドロップダウンと同期)。
+- 3 タブ (ランキング一覧 / 大学一覧 / RoR 検索)。**タブ切替時に各パネルとフィルタ行をトグルする実装**
+  (RoR 検索タブではランキング用フィルタを隠し、専用の検索ボックスを出す)。
+- 大学一覧 / ランキング一覧の列ヘッダーはソートボタン (▲/▼・アクティブ強調・`f-sort` ドロップダウンと同期)。
 - 大学一覧に QS/THE/ARWU 列 + 緑 ARWU バッジ、ソースフィルタ、`matched_only` チェックボックス。
+- RoR 検索タブ: `/api/ror/search` を呼び、正式名称・RoR・Alias (一致表記)・所在国を表示。
 
 ## 作業フロー / 検証
 
 1. matcher.py を変更したら `python -m scripts.collect match` を再実行して DB に反映し、一致率を確認。
 2. `python -m pytest tests/ -q` で全件実行 (`tests/test_matcher.py` に正規化・各段階のテストあり)。
 3. UI/API を変えたらサーバーを再起動し、http://127.0.0.1:8000/ で確認。
+
+## API ドキュメント
+
+- `docs/api.md`: パラメータ・レスポンスを日本語で記述した仕様書 (手書き)。
+- `docs/openapi.json`: OpenAPI 3.1.0 仕様 (FastAPI 自動生成。`python3 -c "from app.main import app; import json; json.dump(app.openapi(), open('docs/openapi.json','w'), indent=2)"` で再生成)。
+- `/docs/openapi` (Swagger UI) / `/openapi.json` (生 JSON) でアプリから直接閲覧可能。
 
 ## 残タスク・留意点
 

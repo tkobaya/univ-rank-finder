@@ -1,0 +1,630 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "University Rank Finder",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/stats": {
+      "get": {
+        "summary": "Statistics",
+        "description": "Returns data source versions, record counts, and the ROR matching status of the rankings.",
+        "operationId": "stats_api_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rankings": {
+      "get": {
+        "summary": "List Rankings",
+        "description": "Lists ranking rows (university name, rank, score) from QS / THE / ARWU. Filter by source, year, country, search term, or matching status; supports column sorting and paging. When a ranking is matched, the corresponding ROR university info is included as `university`.",
+        "operationId": "list_rankings_api_rankings_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Ranking source (qs / the / arwu)",
+              "title": "Source"
+            },
+            "description": "Ranking source (qs / the / arwu)"
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Ranking edition year (e.g. 2026). An empty string is ignored",
+              "title": "Year"
+            },
+            "description": "Ranking edition year (e.g. 2026). An empty string is ignored"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Partial match on university name (org_name), case-insensitive",
+              "title": "Q"
+            },
+            "description": "Partial match on university name (org_name), case-insensitive"
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact match on country name",
+              "title": "Country"
+            },
+            "description": "Exact match on country name"
+          },
+          {
+            "name": "match_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ROR matching status",
+              "choices": [
+                "matched",
+                "unmatched",
+                "ambiguous"
+              ],
+              "title": "Match Status"
+            },
+            "description": "ROR matching status"
+          },
+          {
+            "name": "matched_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "If true, return only rows with status `matched`",
+              "default": false,
+              "title": "Matched Only"
+            },
+            "description": "If true, return only rows with status `matched`"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Sort column. For `rank` / `score`, rows without a value (NULL) always sort last in both orders",
+              "choices": [
+                "source",
+                "year",
+                "rank",
+                "org_name",
+                "country",
+                "score",
+                "match_status"
+              ],
+              "default": "source",
+              "title": "Sort"
+            },
+            "description": "Sort column. For `rank` / `score`, rows without a value (NULL) always sort last in both orders"
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Sort order",
+              "choices": [
+                "asc",
+                "desc"
+              ],
+              "default": "asc",
+              "title": "Order"
+            },
+            "description": "Sort order"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "description": "Number of rows to return (1-1000)",
+              "default": 100,
+              "title": "Limit"
+            },
+            "description": "Number of rows to return (1-1000)"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "Number of rows to skip (0-based)",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Number of rows to skip (0-based)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/universities": {
+      "get": {
+        "summary": "List Universities",
+        "description": "Lists ROR universities with the rankings (QS / THE / ARWU) matched to each one. Search by university name or alias, filter by country, source, or year, and optionally show only universities that have a matched ranking (matched_only). `rank`-type sorts are based on the best rank within that source (universities without a rank always sort last).",
+        "operationId": "list_universities_api_universities_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Partial match on ROR university name or aliases, case-insensitive",
+              "title": "Q"
+            },
+            "description": "Partial match on ROR university name or aliases, case-insensitive"
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact match on country name",
+              "title": "Country"
+            },
+            "description": "Exact match on country name"
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only include rankings from this source",
+              "choices": [
+                "qs",
+                "the",
+                "arwu"
+              ],
+              "title": "Source"
+            },
+            "description": "Only include rankings from this source"
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Ranking edition year (e.g. 2026). An empty string is ignored",
+              "title": "Year"
+            },
+            "description": "Ranking edition year (e.g. 2026). An empty string is ignored"
+          },
+          {
+            "name": "matched_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "If true, return only universities with a matched ranking",
+              "default": false,
+              "title": "Matched Only"
+            },
+            "description": "If true, return only universities with a matched ranking"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Sort key. `rank` = best rank across all sources; `rank:qs` / `rank:the` / `rank:arwu` = best rank within that source; `matches` = number of matched rankings",
+              "choices": [
+                "name",
+                "country",
+                "rank",
+                "rank:qs",
+                "rank:the",
+                "rank:arwu",
+                "matches"
+              ],
+              "default": "name",
+              "title": "Sort"
+            },
+            "description": "Sort key. `rank` = best rank across all sources; `rank:qs` / `rank:the` / `rank:arwu` = best rank within that source; `matches` = number of matched rankings"
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Sort order",
+              "choices": [
+                "asc",
+                "desc"
+              ],
+              "default": "asc",
+              "title": "Order"
+            },
+            "description": "Sort order"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "description": "Number of rows to return (1-1000)",
+              "default": 200,
+              "title": "Limit"
+            },
+            "description": "Number of rows to return (1-1000)"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "Number of rows to skip (0-based)",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Number of rows to skip (0-based)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/universities/{ror_id}": {
+      "get": {
+        "summary": "Get University by ROR ID",
+        "description": "Returns a single ROR university identified by its ROR ID, together with the rankings (QS / THE / ARWU) matched to it across all sources and years. Optionally filter the rankings by source or year.",
+        "operationId": "get_university_api_universities__ror_id__get",
+        "parameters": [
+          {
+            "name": "ror_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ror Id"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only include rankings from this source",
+              "choices": [
+                "qs",
+                "the",
+                "arwu"
+              ],
+              "title": "Source"
+            },
+            "description": "Only include rankings from this source"
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Ranking edition year (e.g. 2026). An empty string is ignored",
+              "title": "Year"
+            },
+            "description": "Ranking edition year (e.g. 2026). An empty string is ignored"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ror/search": {
+      "get": {
+        "summary": "Search ROR Universities",
+        "description": "Searches ROR universities by partial name. Matches the display name and aliases, ranks the results by relevance (exact name, prefix, alias, substring) and returns the ROR ID and the matched spelling. Intended to power a ROR ID picker / validator for university name input.",
+        "operationId": "search_ror_api_ror_search_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Partial match on ROR university name or alias",
+              "title": "Q"
+            },
+            "description": "Partial match on ROR university name or alias"
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ROR country name for exact-match filtering",
+              "title": "Country"
+            },
+            "description": "ROR country name for exact-match filtering"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Number of results to return (1-100)",
+              "default": 20,
+              "title": "Limit"
+            },
+            "description": "Number of results to return (1-100)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/countries": {
+      "get": {
+        "summary": "List Countries",
+        "description": "Lists country names present in the universities table (ROR `country` values) in alphabetical order.",
+        "operationId": "list_countries_api_countries_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

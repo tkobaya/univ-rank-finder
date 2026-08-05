@@ -1,11 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BeforeValidator
 from sqlalchemy import String, asc, cast, desc, func, select
 from sqlalchemy.orm import Session
 
-from .collectors.matcher import STATUS_MATCHED
+from .collectors.matcher import STATUS_MATCHED, normalize_name
 from .database import DataSource, Ranking, University, get_db
 
 router = APIRouter(prefix="/api")
@@ -17,10 +17,18 @@ def _empty_to_none(v):
     return v
 
 
-YearParam = Annotated[int | None, Query(), BeforeValidator(_empty_to_none)]
+YearParam = Annotated[
+    int | None,
+    Query(description="Ranking edition year (e.g. 2026). An empty string is ignored"),
+    BeforeValidator(_empty_to_none),
+]
 
 
-@router.get("/stats")
+@router.get(
+    "/stats",
+    summary="Statistics",
+    description="Returns data source versions, record counts, and the ROR matching status of the rankings.",
+)
 def stats(db: Session = Depends(get_db)):
     by_source = {}
     rows = db.execute(
@@ -61,18 +69,32 @@ def stats(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/rankings")
+@router.get(
+    "/rankings",
+    summary="List Rankings",
+    description=(
+        "Lists ranking rows (university name, rank, score) from QS / THE / ARWU. "
+        "Filter by source, year, country, search term, or matching status; supports column sorting and paging. "
+        "When a ranking is matched, the corresponding ROR university info is included as `university`."
+    ),
+)
 def list_rankings(
-    source: str | None = Query(default=None),
+    source: str | None = Query(default=None, description="Ranking source (qs / the / arwu)"),
     year: YearParam = None,
-    q: str | None = Query(default=None, description="大学名の部分一致"),
-    country: str | None = Query(default=None),
-    match_status: str | None = Query(default=None, choices=["matched", "unmatched", "ambiguous"]),
-    matched_only: bool = Query(default=False),
-    sort: str = Query(default="source", choices=["source", "year", "rank", "org_name", "country", "score", "match_status"]),
-    order: str = Query(default="asc", choices=["asc", "desc"]),
-    limit: int = Query(default=100, le=1000),
-    offset: int = Query(default=0),
+    q: str | None = Query(default=None, description="Partial match on university name (org_name), case-insensitive"),
+    country: str | None = Query(default=None, description="Exact match on country name"),
+    match_status: str | None = Query(
+        default=None, choices=["matched", "unmatched", "ambiguous"], description="ROR matching status"
+    ),
+    matched_only: bool = Query(default=False, description="If true, return only rows with status `matched`"),
+    sort: str = Query(
+        default="source",
+        choices=["source", "year", "rank", "org_name", "country", "score", "match_status"],
+        description="Sort column. For `rank` / `score`, rows without a value (NULL) always sort last in both orders",
+    ),
+    order: str = Query(default="asc", choices=["asc", "desc"], description="Sort order"),
+    limit: int = Query(default=100, le=1000, description="Number of rows to return (1-1000)"),
+    offset: int = Query(default=0, description="Number of rows to skip (0-based)"),
     db: Session = Depends(get_db),
 ):
     sort_map = {
@@ -136,17 +158,33 @@ def list_rankings(
     }
 
 
-@router.get("/universities")
+@router.get(
+    "/universities",
+    summary="List Universities",
+    description=(
+        "Lists ROR universities with the rankings (QS / THE / ARWU) matched to each one. "
+        "Search by university name or alias, filter by country, source, or year, and optionally show only "
+        "universities that have a matched ranking (matched_only). `rank`-type sorts are based on the best rank "
+        "within that source (universities without a rank always sort last)."
+    ),
+)
 def list_universities(
-    q: str | None = Query(default=None, description="ROR 大学名の部分一致"),
-    country: str | None = Query(default=None),
-    source: str | None = Query(default=None, choices=["qs", "the", "arwu"]),
+    q: str | None = Query(default=None, description="Partial match on ROR university name or aliases, case-insensitive"),
+    country: str | None = Query(default=None, description="Exact match on country name"),
+    source: str | None = Query(default=None, choices=["qs", "the", "arwu"], description="Only include rankings from this source"),
     year: YearParam = None,
-    matched_only: bool = Query(default=False, description="ランキング一致分のみ"),
-    sort: str = Query(default="name", choices=["name", "country", "rank", "rank:qs", "rank:the", "rank:arwu", "matches"]),
-    order: str = Query(default="asc", choices=["asc", "desc"]),
-    limit: int = Query(default=200, le=1000),
-    offset: int = Query(default=0),
+    matched_only: bool = Query(default=False, description="If true, return only universities with a matched ranking"),
+    sort: str = Query(
+        default="name",
+        choices=["name", "country", "rank", "rank:qs", "rank:the", "rank:arwu", "matches"],
+        description=(
+            "Sort key. `rank` = best rank across all sources; `rank:qs` / `rank:the` / `rank:arwu` = best rank "
+            "within that source; `matches` = number of matched rankings"
+        ),
+    ),
+    order: str = Query(default="asc", choices=["asc", "desc"], description="Sort order"),
+    limit: int = Query(default=200, le=1000, description="Number of rows to return (1-1000)"),
+    offset: int = Query(default=0, description="Number of rows to skip (0-based)"),
     db: Session = Depends(get_db),
 ):
     stmt = select(University)
@@ -228,7 +266,129 @@ def list_universities(
     return {"total": total, "items": items[offset : offset + limit]}
 
 
-@router.get("/countries")
+@router.get(
+    "/universities/{ror_id}",
+    summary="Get University by ROR ID",
+    description=(
+        "Returns a single ROR university identified by its ROR ID, together with the rankings (QS / THE / ARWU) "
+        "matched to it across all sources and years. Optionally filter the rankings by source or year."
+    ),
+)
+def get_university(
+    ror_id: str,
+    source: str | None = Query(default=None, choices=["qs", "the", "arwu"], description="Only include rankings from this source"),
+    year: YearParam = None,
+    db: Session = Depends(get_db),
+):
+    u = db.execute(select(University).where(University.ror_id == ror_id)).scalars().first()
+    if u is None:
+        raise HTTPException(status_code=404, detail=f"ROR organization not found: {ror_id}")
+
+    r_stmt = select(Ranking).where(Ranking.university_id == u.id)
+    if source:
+        r_stmt = r_stmt.where(Ranking.source == source)
+    if year:
+        r_stmt = r_stmt.where(Ranking.year == year)
+    rankings = db.execute(r_stmt.order_by(Ranking.source, Ranking.year)).scalars().all()
+
+    return {
+        "ror_id": u.ror_id,
+        "name": u.name,
+        "country": u.country,
+        "country_code": u.country_code,
+        "region": u.region,
+        "website": u.website,
+        "wikipedia_url": u.wikipedia_url,
+        "types": u.types,
+        "ror_version": u.ror_version,
+        "rankings": [
+            {
+                "source": r.source,
+                "year": r.year,
+                "rank": r.rank,
+                "rank_display": r.rank_display,
+                "score": r.score,
+                "org_name": r.org_name,
+            }
+            for r in rankings
+        ],
+    }
+
+
+@router.get(
+    "/ror/search",
+    summary="Search ROR Universities",
+    description=(
+        "Searches ROR universities by partial name. Matches the display name and aliases, ranks the results "
+        "by relevance (exact name, prefix, alias, substring) and returns the ROR ID and the matched spelling. "
+        "Intended to power a ROR ID picker / validator for university name input."
+    ),
+)
+def search_ror(
+    q: str = Query(..., min_length=1, description="Partial match on ROR university name or alias"),
+    country: str | None = Query(default=None, description="ROR country name for exact-match filtering"),
+    limit: int = Query(default=20, ge=1, le=100, description="Number of results to return (1-100)"),
+    db: Session = Depends(get_db),
+):
+    nq = normalize_name(q)
+    stmt = select(University).where(
+        (University.name.ilike(f"%{q}%"))
+        | (cast(University.aliases, String).ilike(f"%{q}%"))
+        | (cast(University.acronyms, String).ilike(f"%{q}%"))
+    )
+    if country:
+        stmt = stmt.where(University.country == country)
+    rows = db.execute(stmt.limit(500)).scalars().all()
+
+    scored = []
+    for u in rows:
+        name_n = normalize_name(u.name)
+        aliases_n = [normalize_name(a) for a in u.aliases or []]
+        acronyms_n = [normalize_name(a) for a in u.acronyms or []]
+
+        if nq and name_n == nq:
+            score, matched = 0, u.name
+        elif nq and nq in aliases_n:
+            score, matched = 1, (u.aliases or [])[aliases_n.index(nq)]
+        elif nq and nq in acronyms_n:
+            score, matched = 1, (u.acronyms or [])[acronyms_n.index(nq)]
+        elif nq and name_n.startswith(nq):
+            score, matched = 2, u.name
+        elif nq and any(a.startswith(nq) for a in aliases_n):
+            score, matched = 3, (u.aliases or [])[next(i for i, a in enumerate(aliases_n) if a.startswith(nq))]
+        elif nq and any(a.startswith(nq) for a in acronyms_n):
+            score, matched = 3, (u.acronyms or [])[next(i for i, a in enumerate(acronyms_n) if a.startswith(nq))]
+        elif nq and nq in name_n:
+            score, matched = 4, u.name
+        elif nq and any(nq in a for a in aliases_n):
+            score, matched = 5, (u.aliases or [])[next(i for i, a in enumerate(aliases_n) if nq in a)]
+        elif q.lower() in u.name.lower():
+            score, matched = 6, u.name
+        else:
+            continue
+        scored.append((score, len(matched), u.name.lower(), u, matched))
+
+    scored.sort(key=lambda x: (x[0], x[1], x[2]))
+    items = [
+        {
+            "ror_id": u.ror_id,
+            "name": u.name,
+            "country": u.country,
+            "country_code": u.country_code,
+            "region": u.region,
+            "types": u.types,
+            "matched_name": matched,
+        }
+        for _, _, _, u, matched in scored[:limit]
+    ]
+    return {"q": q, "total": len(scored), "items": items}
+
+
+@router.get(
+    "/countries",
+    summary="List Countries",
+    description="Lists country names present in the universities table (ROR `country` values) in alphabetical order.",
+)
 def list_countries(db: Session = Depends(get_db)):
     rows = db.execute(select(University.country).distinct().order_by(University.country)).scalars().all()
     return {"items": [c for c in rows if c]}

@@ -12,6 +12,9 @@
   header { background:#111; color:#fff; padding:18px 24px; }
   header h1 { margin:0; font-size:20px; }
   header .sub { color:#bbb; font-size:12px; margin-top:4px; }
+  header .api-link { float:right; color:#bbb; font-size:13px; border:1px solid #444;
+             border-radius:6px; padding:6px 12px; margin-top:4px; }
+  header .api-link:hover { color:#fff; border-color:var(--accent); text-decoration:none; }
   main { max-width:1200px; margin:0 auto; padding:20px 24px 60px; }
   .filters { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin:16px 0;
              background:#fff; border:1px solid var(--border); border-radius:8px; padding:14px 16px; }
@@ -49,6 +52,7 @@
 </head>
 <body>
 <header>
+  <a class="api-link" href="/docs/openapi" target="_blank" rel="noopener">API ドキュメント</a>
   <h1>University Rank Finder</h1>
   <div class="sub" id="header-sub">読み込み中...</div>
 </header>
@@ -56,6 +60,13 @@
   <div class="tabs">
     <button id="tab-universities" class="active">大学一覧 (ROR 一致)</button>
     <button id="tab-rankings">ランキング生データ</button>
+    <button id="tab-ror">RoR 検索</button>
+  </div>
+
+  <div class="filters" id="ror-filters" style="display:none">
+    <div><label>検索</label><input id="ror-q" placeholder="大学名 (部分一致)" style="width:320px" /></div>
+    <button id="btn-ror-search" style="padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer">検索</button>
+    <span class="muted" style="font-size:12px">ランキング情報を使わない純粋な RoR 検索</span>
   </div>
 
   <div class="filters" id="filters">
@@ -113,6 +124,21 @@
       <button id="rank-prev">← 前</button>
       <span id="rank-info" class="muted"></span>
       <button id="rank-next">次 →</button>
+    </div>
+  </div>
+
+  <div id="panel-ror" style="display:none">
+    <div class="card"><table>
+      <thead><tr>
+        <th>正式名称</th>
+        <th>RoR</th>
+        <th>Alias (一致表記)</th>
+        <th>所在国</th>
+      </tr></thead>
+      <tbody id="ror-body"></tbody>
+    </table></div>
+    <div class="pager">
+      <span id="ror-info" class="muted"></span>
     </div>
   </div>
 </main>
@@ -176,6 +202,7 @@ async function loadUniversities() {
   $("#loading").style.display = "block";
   $("#panel-rankings").style.display = "none";
   $("#panel-universities").style.display = "none";
+  $("#panel-ror").style.display = "none";
   try {
     const params = new URLSearchParams({
       q: $("#f-q").value, country: $("#f-country").value, source: $("#f-source").value,
@@ -216,6 +243,7 @@ async function loadRankings() {
   $("#loading").style.display = "block";
   $("#panel-universities").style.display = "none";
   $("#panel-rankings").style.display = "none";
+  $("#panel-ror").style.display = "none";
   try {
     const params = new URLSearchParams({
       q: $("#f-q").value, source: $("#f-source").value, year: $("#f-year").value,
@@ -250,9 +278,46 @@ async function loadRankings() {
   }
 }
 
+async function loadRor() {
+  $("#loading").style.display = "block";
+  $("#panel-universities").style.display = "none";
+  $("#panel-rankings").style.display = "none";
+  $("#panel-ror").style.display = "none";
+  try {
+    const q = $("#ror-q").value.trim();
+    const body = $("#ror-body");
+    body.innerHTML = "";
+    if (!q) {
+      $("#ror-info").textContent = "検索語を入力してください";
+      return;
+    }
+    const params = new URLSearchParams({ q, limit: 50 });
+    const d = await getJSON("/api/ror/search?" + params);
+    d.items.forEach((u) => {
+      const tr = document.createElement("tr");
+      const alias = u.matched_name && u.matched_name !== u.name ? u.matched_name : "-";
+      tr.innerHTML = `
+        <td><a href="https://ror.org/${escapeHtml(u.ror_id)}" target="_blank" rel="noopener">${escapeHtml(u.name)}</a></td>
+        <td><a href="https://ror.org/${escapeHtml(u.ror_id)}" target="_blank" rel="noopener">${escapeHtml(u.ror_id)}</a></td>
+        <td>${escapeHtml(alias)}</td>
+        <td>${escapeHtml(u.country || "-")}${u.country_code ? ` <span class="muted">(${escapeHtml(u.country_code)})</span>` : ""}</td>`;
+      body.appendChild(tr);
+    });
+    if (!d.items.length) body.innerHTML = '<tr><td colspan="4"><div class="empty">該当なし</div></td></tr>';
+    $("#ror-info").textContent = `${d.total} 件の候補`;
+  } catch (e) {
+    $("#ror-body").innerHTML = `<tr><td colspan="4" class="empty">エラー: ${e.message}</td></tr>`;
+  } finally {
+    $("#loading").style.display = "none";
+    $("#panel-ror").style.display = "block";
+  }
+}
+
 function render() {
   updateSortIndicators();
-  if (state.tab === "universities") loadUniversities(); else loadRankings();
+  if (state.tab === "universities") loadUniversities();
+  else if (state.tab === "rankings") loadRankings();
+  else loadRor();
 }
 
 function onHeaderClick(e) {
@@ -295,14 +360,31 @@ $("#tab-universities").onclick = () => {
   state.tab = "universities";
   $("#tab-universities").classList.add("active");
   $("#tab-rankings").classList.remove("active");
+  $("#tab-ror").classList.remove("active");
+  $("#filters").style.display = "flex";
+  $("#ror-filters").style.display = "none";
   render();
 };
 $("#tab-rankings").onclick = () => {
   state.tab = "rankings";
   $("#tab-rankings").classList.add("active");
   $("#tab-universities").classList.remove("active");
+  $("#tab-ror").classList.remove("active");
+  $("#filters").style.display = "flex";
+  $("#ror-filters").style.display = "none";
   render();
 };
+$("#tab-ror").onclick = () => {
+  state.tab = "ror";
+  $("#tab-ror").classList.add("active");
+  $("#tab-universities").classList.remove("active");
+  $("#tab-rankings").classList.remove("active");
+  $("#filters").style.display = "none";
+  $("#ror-filters").style.display = "flex";
+  render();
+};
+$("#btn-ror-search").onclick = () => loadRor();
+$("#ror-q").addEventListener("keydown", (e) => { if (e.key === "Enter") loadRor(); });
 $("#btn-apply").onclick = () => {
   state.uniSort = $("#f-sort").value;
   state.uniOrder = "asc";
