@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
 <title>University Rank Finder</title>
 <style>
   :root { --accent:#b22222; --muted:#6b7280; --border:#e5e7eb; }
@@ -15,6 +16,9 @@
   header .api-link { float:right; color:#bbb; font-size:13px; border:1px solid #444;
              border-radius:6px; padding:6px 12px; margin-top:4px; }
   header .api-link:hover { color:#fff; border-color:var(--accent); text-decoration:none; }
+  header .github-link { float:right; color:#bbb; font-size:13px; border:1px solid #444;
+             border-radius:6px; padding:6px 12px; margin-top:4px; margin-right:8px; }
+  header .github-link:hover { color:#fff; border-color:var(--accent); text-decoration:none; }
   main { max-width:1200px; margin:0 auto; padding:20px 24px 60px; }
   .filters { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin:16px 0;
              background:#fff; border:1px solid var(--border); border-radius:8px; padding:14px 16px; }
@@ -58,6 +62,7 @@
 <body>
 <header>
   <a class="api-link" href="/docs/openapi" target="_blank" rel="noopener">API Docs</a>
+  <a class="github-link" href="https://github.com/tkobaya/univ-rank-finder" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> GitHub Repo</a>
   <h1>University Rank Finder</h1>
   <div class="sub" id="header-sub">Loading...</div>
 </header>
