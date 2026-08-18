@@ -6,3 +6,4 @@ data/*.json
 data/*.csv
 data/*.db
 .pytest_cache/
+deploy.sh

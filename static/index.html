@@ -61,7 +61,7 @@
 </head>
 <body>
 <header>
-  <a class="api-link" href="/docs/openapi" target="_blank" rel="noopener">API Docs</a>
+  <a class="api-link" href="docs/openapi" target="_blank" rel="noopener">API Docs</a>
   <a class="github-link" href="https://github.com/tkobaya/univ-rank-finder" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> GitHub Repo</a>
   <h1>University Rank Finder</h1>
   <div class="sub" id="header-sub">Loading...</div>
@@ -171,7 +171,7 @@ async function getJSON(url) {
 }
 
 async function loadStats() {
-  const s = await getJSON("/api/stats");
+  const s = await getJSON("api/stats");
   const parts = [];
   const ror = s.datasets.find((d) => d.name === "ror");
   if (ror) parts.push(`RoR ${ror.version} (${ror.published_at ?? ""}) ${ror.record_count.toLocaleString()} records`);
@@ -183,7 +183,7 @@ async function loadStats() {
 }
 
 async function loadCountries() {
-  const c = await getJSON("/api/countries");
+  const c = await getJSON("api/countries");
   const sel = $("#f-country");
   for (const name of c.items) {
     const opt = document.createElement("option");
@@ -193,7 +193,7 @@ async function loadCountries() {
 }
 
 async function loadYears() {
-  const s = await getJSON("/api/stats");
+  const s = await getJSON("api/stats");
   const years = new Set();
   for (const arr of Object.values(s.rankings_by_source)) for (const a of arr) years.add(a.year);
   const sel = $("#f-year");
@@ -224,7 +224,7 @@ async function loadUniversities() {
       matched_only: $("#f-matched").checked ? "true" : "false",
       limit: state.pageSize, offset: state.uniPage * state.pageSize,
     });
-    const d = await getJSON("/api/universities?" + params);
+    const d = await getJSON("api/universities?" + params);
     const body = $("#uni-body");
     body.innerHTML = "";
     d.items.forEach((u, i) => {
@@ -266,7 +266,7 @@ async function loadRankings() {
       sort: state.rankSort, order: state.rankOrder,
       limit: state.pageSize, offset: state.rankPage * state.pageSize,
     });
-    const d = await getJSON("/api/rankings?" + params);
+    const d = await getJSON("api/rankings?" + params);
     const body = $("#rank-body");
     body.innerHTML = "";
     d.items.forEach((r) => {
@@ -308,7 +308,7 @@ async function loadRor() {
       return;
     }
     const params = new URLSearchParams({ q, limit: 50 });
-    const d = await getJSON("/api/ror/search?" + params);
+    const d = await getJSON("api/ror/search?" + params);
     d.items.forEach((u) => {
       const tr = document.createElement("tr");
       const alias = u.matched_name && u.matched_name !== u.name ? u.matched_name : "-";
