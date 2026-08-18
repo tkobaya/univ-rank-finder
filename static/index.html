@@ -48,92 +48,101 @@
   th .th-btn:hover { color:var(--accent); }
   th .th-btn.active { color:var(--accent); }
   th .th-btn .arrow { font-size:9px; margin-left:2px; }
+  .ror-id { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:12px; }
+  .copy-btn { margin-left:6px; padding:2px 7px; border:1px solid var(--border); background:#fff;
+              border-radius:5px; font-size:11px; cursor:pointer; color:var(--muted); }
+  .copy-btn:hover { color:var(--accent); border-color:var(--accent); }
+  .copy-btn.done { color:#15803d; border-color:#15803d; }
 </style>
 </head>
 <body>
 <header>
-  <a class="api-link" href="/docs/openapi" target="_blank" rel="noopener">API ドキュメント</a>
+  <a class="api-link" href="/docs/openapi" target="_blank" rel="noopener">API Docs</a>
   <h1>University Rank Finder</h1>
-  <div class="sub" id="header-sub">読み込み中...</div>
+  <div class="sub" id="header-sub">Loading...</div>
 </header>
 <main>
   <div class="tabs">
-    <button id="tab-universities" class="active">大学一覧 (ROR 一致)</button>
-    <button id="tab-rankings">ランキング生データ</button>
-    <button id="tab-ror">RoR 検索</button>
+    <button id="tab-universities" class="active">Universities (ROR matched)</button>
+    <button id="tab-rankings">Rankings Data</button>
+    <button id="tab-ror">ROR Search</button>
   </div>
 
   <div class="filters" id="ror-filters" style="display:none">
-    <div><label>検索</label><input id="ror-q" placeholder="大学名 (部分一致)" style="width:320px" /></div>
-    <button id="btn-ror-search" style="padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer">検索</button>
-    <span class="muted" style="font-size:12px">ランキング情報を使わない純粋な RoR 検索</span>
+    <div><label>Search</label><input id="ror-q" placeholder="University name (partial)" style="width:320px" /></div>
+    <button id="btn-ror-search" style="padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer">Search</button>
+    <span class="muted" style="font-size:12px">Pure ROR search without ranking data</span>
   </div>
 
   <div class="filters" id="filters">
-    <div><label>検索</label><input id="f-q" placeholder="大学名" /></div>
-    <div><label>国</label><select id="f-country"><option value="">すべて</option></select></div>
-    <div><label>ソース</label>
-      <select id="f-source"><option value="">すべて</option><option value="qs">QS</option><option value="the">THE</option><option value="arwu">ARWU</option></select>
+    <div><label>Search</label><input id="f-q" placeholder="University name" /></div>
+    <div><label>Country</label><select id="f-country" style="width:150px"><option value="">All</option></select></div>
+    <div><label>Source</label>
+      <select id="f-source"><option value="">All</option><option value="qs">QS</option><option value="the">THE</option><option value="arwu">ARWU</option></select>
     </div>
-    <div><label>年度</label><select id="f-year"><option value="">すべて</option></select></div>
-    <div><label>ソート</label>
-      <select id="f-sort"><option value="name">名前</option><option value="country">国</option>
-      <option value="rank">順位</option><option value="rank:qs">QS 順位</option><option value="rank:the">THE 順位</option>
-      <option value="rank:arwu">ARWU 順位</option><option value="matches">ランキング数</option></select>
+    <div><label>Year</label><select id="f-year"><option value="">All</option></select></div>
+    <div id="f-match-wrap" style="display:none"><label>ROR Match</label>
+      <select id="f-match"><option value="">All</option><option value="matched">Matched</option><option value="unmatched">Unmatched</option><option value="ambiguous">Ambiguous</option></select>
     </div>
-    <div><label><input type="checkbox" id="f-matched" />ランキング一致のみ</label></div>
-    <button id="btn-apply" style="padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer">適用</button>
+    <div><label>Sort</label>
+      <select id="f-sort"><option value="name">Name</option><option value="country">Country</option>
+      <option value="rank">Rank</option><option value="rank:qs">QS Rank</option><option value="rank:the">THE Rank</option>
+      <option value="rank:arwu">ARWU Rank</option><option value="matches"># Rankings</option></select>
+    </div>
+    <div id="f-matched-wrap" style="display:flex"><label><input type="checkbox" id="f-matched" />Matched only</label></div>
+    <button id="btn-apply" style="padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer">Apply</button>
   </div>
 
-  <div id="loading">読み込み中...</div>
+  <div id="loading">Loading...</div>
 
   <div id="panel-universities">
     <div class="card"><table>
       <thead><tr>
         <th>#</th>
-        <th><button class="th-btn" data-sort="name">大学 (RoR)<span class="arrow"></span></button></th>
-        <th><button class="th-btn" data-sort="country">国<span class="arrow"></span></button></th>
-        <th><button class="th-btn" data-sort="rank:qs">QS 順位<span class="arrow"></span></button></th>
-        <th><button class="th-btn" data-sort="rank:the">THE 順位<span class="arrow"></span></button></th>
-        <th><button class="th-btn" data-sort="rank:arwu">ARWU 順位<span class="arrow"></span></button></th>
-        <th>リンク</th>
+        <th><button class="th-btn" data-sort="name">University (ROR)<span class="arrow"></span></button></th>
+        <th>RoR</th>
+        <th><button class="th-btn" data-sort="country">Country<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="rank:qs">QS Rank<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="rank:the">THE Rank<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="rank:arwu">ARWU Rank<span class="arrow"></span></button></th>
+        <th>Links</th>
       </tr></thead>
       <tbody id="uni-body"></tbody>
     </table></div>
     <div class="pager" id="uni-pager">
-      <button id="uni-prev">← 前</button>
+      <button id="uni-prev">← Prev</button>
       <span id="uni-info" class="muted"></span>
-      <button id="uni-next">次 →</button>
+      <button id="uni-next">Next →</button>
     </div>
   </div>
 
   <div id="panel-rankings" style="display:none">
     <div class="card"><table>
       <thead><tr>
-        <th><button class="th-btn" data-sort="source">ソース<span class="arrow"></span></button></th>
-        <th><button class="th-btn" data-sort="year">年度<span class="arrow"></span></button></th>
-        <th><button class="th-btn" data-sort="rank">順位<span class="arrow"></span></button></th>
-        <th><button class="th-btn" data-sort="org_name">大学名<span class="arrow"></span></button></th>
-        <th><button class="th-btn" data-sort="country">国<span class="arrow"></span></button></th>
-        <th><button class="th-btn" data-sort="score">スコア<span class="arrow"></span></button></th>
-        <th><button class="th-btn" data-sort="match_status">RoR 一致<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="source">Source<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="year">Year<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="rank">Rank<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="org_name">University<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="country">Country<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="score">Score<span class="arrow"></span></button></th>
+        <th><button class="th-btn" data-sort="match_status">ROR Match<span class="arrow"></span></button></th>
       </tr></thead>
       <tbody id="rank-body"></tbody>
     </table></div>
     <div class="pager" id="rank-pager">
-      <button id="rank-prev">← 前</button>
+      <button id="rank-prev">← Prev</button>
       <span id="rank-info" class="muted"></span>
-      <button id="rank-next">次 →</button>
+      <button id="rank-next">Next →</button>
     </div>
   </div>
 
   <div id="panel-ror" style="display:none">
     <div class="card"><table>
       <thead><tr>
-        <th>正式名称</th>
+        <th>Official Name</th>
         <th>RoR</th>
-        <th>Alias (一致表記)</th>
-        <th>所在国</th>
+        <th>Alias (matched)</th>
+        <th>Country</th>
       </tr></thead>
       <tbody id="ror-body"></tbody>
     </table></div>
@@ -160,11 +169,11 @@ async function loadStats() {
   const s = await getJSON("/api/stats");
   const parts = [];
   const ror = s.datasets.find((d) => d.name === "ror");
-  if (ror) parts.push(`RoR ${ror.version} (${ror.published_at ?? ""}) ${ror.record_count.toLocaleString()} 件`);
+  if (ror) parts.push(`RoR ${ror.version} (${ror.published_at ?? ""}) ${ror.record_count.toLocaleString()} records`);
   for (const [src, arr] of Object.entries(s.rankings_by_source)) {
-    for (const a of arr) parts.push(`${src.toUpperCase()} ${a.year}: ${a.count} 件`);
+    for (const a of arr) parts.push(`${src.toUpperCase()} ${a.year}: ${a.count} records`);
   }
-  parts.push(`一致 ${s.rankings.matched}/${s.rankings.total}`);
+  parts.push(`matched ${s.rankings.matched}/${s.rankings.total}`);
   $("#header-sub").textContent = parts.join(" ・ ");
 }
 
@@ -219,6 +228,7 @@ async function loadUniversities() {
       tr.innerHTML = `
         <td>${state.uniPage * state.pageSize + i + 1}</td>
         <td>${rorLink}</td>
+        <td><a class="ror-id" href="https://ror.org/${escapeHtml(u.ror_id)}" target="_blank" rel="noopener">ror.org/${escapeHtml(u.ror_id)}</a><button class="copy-btn" data-copy="${escapeHtml(u.ror_id)}">Copy</button></td>
         <td>${escapeHtml(u.country || "-")}</td>
         <td>${rankBadge(u.rankings, "qs")}</td>
         <td>${rankBadge(u.rankings, "the")}</td>
@@ -226,13 +236,13 @@ async function loadUniversities() {
         <td>${u.website ? `<a href="${escapeHtml(u.website)}" target="_blank" rel="noopener">web</a>` : ""}</td>`;
       body.appendChild(tr);
     });
-    if (!d.items.length) body.innerHTML = '<tr><td colspan="7"><div class="empty">該当なし</div></td></tr>';
+    if (!d.items.length) body.innerHTML = '<tr><td colspan="8"><div class="empty">No results</div></td></tr>';
     const total = d.total || d.items.length;
     $("#uni-info").textContent = `${state.uniPage * state.pageSize + 1}-${Math.min((state.uniPage + 1) * state.pageSize, total)} / ${total}`;
     $("#uni-prev").disabled = state.uniPage === 0;
     $("#uni-next").disabled = (state.uniPage + 1) * state.pageSize >= total;
   } catch (e) {
-    $("#uni-body").innerHTML = `<tr><td colspan="7" class="empty">エラー: ${e.message}</td></tr>`;
+    $("#uni-body").innerHTML = `<tr><td colspan="8" class="empty">Error: ${e.message}</td></tr>`;
   } finally {
     $("#loading").style.display = "none";
     $("#panel-universities").style.display = "block";
@@ -247,6 +257,7 @@ async function loadRankings() {
   try {
     const params = new URLSearchParams({
       q: $("#f-q").value, source: $("#f-source").value, year: $("#f-year").value,
+      match_status: $("#f-match").value,
       sort: state.rankSort, order: state.rankOrder,
       limit: state.pageSize, offset: state.rankPage * state.pageSize,
     });
@@ -265,13 +276,13 @@ async function loadRankings() {
         <td>${r.university ? `✓ ${escapeHtml(r.university.name)}` : `<span class="muted">${escapeHtml(r.match_status)}</span>`}</td>`;
       body.appendChild(tr);
     });
-    if (!d.items.length) body.innerHTML = '<tr><td colspan="7"><div class="empty">該当なし</div></td></tr>';
+    if (!d.items.length) body.innerHTML = '<tr><td colspan="7"><div class="empty">No results</div></td></tr>';
     const total = d.total || d.items.length;
     $("#rank-info").textContent = `${state.rankPage * state.pageSize + 1}-${Math.min((state.rankPage + 1) * state.pageSize, total)} / ${total}`;
     $("#rank-prev").disabled = state.rankPage === 0;
     $("#rank-next").disabled = (state.rankPage + 1) * state.pageSize >= total;
   } catch (e) {
-    $("#rank-body").innerHTML = `<tr><td colspan="7" class="empty">エラー: ${e.message}</td></tr>`;
+    $("#rank-body").innerHTML = `<tr><td colspan="7" class="empty">Error: ${e.message}</td></tr>`;
   } finally {
     $("#loading").style.display = "none";
     $("#panel-rankings").style.display = "block";
@@ -288,7 +299,7 @@ async function loadRor() {
     const body = $("#ror-body");
     body.innerHTML = "";
     if (!q) {
-      $("#ror-info").textContent = "検索語を入力してください";
+      $("#ror-info").textContent = "Enter a search term";
       return;
     }
     const params = new URLSearchParams({ q, limit: 50 });
@@ -303,10 +314,10 @@ async function loadRor() {
         <td>${escapeHtml(u.country || "-")}${u.country_code ? ` <span class="muted">(${escapeHtml(u.country_code)})</span>` : ""}</td>`;
       body.appendChild(tr);
     });
-    if (!d.items.length) body.innerHTML = '<tr><td colspan="4"><div class="empty">該当なし</div></td></tr>';
-    $("#ror-info").textContent = `${d.total} 件の候補`;
+    if (!d.items.length) body.innerHTML = '<tr><td colspan="4"><div class="empty">No results</div></td></tr>';
+    $("#ror-info").textContent = `${d.total} candidates`;
   } catch (e) {
-    $("#ror-body").innerHTML = `<tr><td colspan="4" class="empty">エラー: ${e.message}</td></tr>`;
+    $("#ror-body").innerHTML = `<tr><td colspan="4" class="empty">Error: ${e.message}</td></tr>`;
   } finally {
     $("#loading").style.display = "none";
     $("#panel-ror").style.display = "block";
@@ -356,12 +367,28 @@ function escapeHtml(s) {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+$("#uni-body").addEventListener("click", async (e) => {
+  const btn = e.target.closest(".copy-btn");
+  if (!btn) return;
+  try {
+    await navigator.clipboard.writeText(btn.dataset.copy);
+    btn.textContent = "Copied";
+    btn.classList.add("done");
+    setTimeout(() => { btn.textContent = "Copy"; btn.classList.remove("done"); }, 1500);
+  } catch {
+    btn.textContent = "Failed";
+    setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+  }
+});
+
 $("#tab-universities").onclick = () => {
   state.tab = "universities";
   $("#tab-universities").classList.add("active");
   $("#tab-rankings").classList.remove("active");
   $("#tab-ror").classList.remove("active");
   $("#filters").style.display = "flex";
+  $("#f-matched-wrap").style.display = "flex";
+  $("#f-match-wrap").style.display = "none";
   $("#ror-filters").style.display = "none";
   render();
 };
@@ -371,6 +398,8 @@ $("#tab-rankings").onclick = () => {
   $("#tab-universities").classList.remove("active");
   $("#tab-ror").classList.remove("active");
   $("#filters").style.display = "flex";
+  $("#f-matched-wrap").style.display = "none";
+  $("#f-match-wrap").style.display = "inline-block";
   $("#ror-filters").style.display = "none";
   render();
 };
@@ -392,6 +421,15 @@ $("#btn-apply").onclick = () => {
   render();
 };
 $("#f-q").addEventListener("keydown", (e) => { if (e.key === "Enter") { state.uniPage = 0; state.rankPage = 0; render(); } });
+let qTimer = null;
+$("#f-q").addEventListener("input", () => {
+  clearTimeout(qTimer);
+  qTimer = setTimeout(() => {
+    if (state.tab === "ror") return;
+    state.uniPage = 0; state.rankPage = 0;
+    render();
+  }, 300);
+});
 $("#uni-prev").onclick = () => { state.uniPage--; loadUniversities(); };
 $("#uni-next").onclick = () => { state.uniPage++; loadUniversities(); };
 $("#rank-prev").onclick = () => { state.rankPage--; loadRankings(); };
