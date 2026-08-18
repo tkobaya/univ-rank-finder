@@ -1,0 +1,10 @@
+services:
+  app:
+    build: .
+    ports:
+      - "0.0.0.0:8005:8000"
+    volumes:
+      - ./data:/app/data
+      - ./app:/app/app
+      - ./static:/app/static
+    restart: unless-stopped
