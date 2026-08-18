@@ -3,6 +3,8 @@ services:
     build: .
     ports:
       - "0.0.0.0:8005:8000"
+    environment:
+      - ROOT_PATH=${ROOT_PATH:-/webapp/univ-rank-finder}
     volumes:
       - ./data:/app/data
       - ./app:/app/app

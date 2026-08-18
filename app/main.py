@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -10,7 +11,17 @@ from .database import init_db
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
-app = FastAPI(title="University Rank Finder", version="0.1.0")
+# External URL prefix when the app is served behind a reverse proxy
+# (e.g. https://host/webapp/univ-rank-finder -> ROOT_PATH=/webapp/univ-rank-finder).
+ROOT_PATH = os.getenv("ROOT_PATH", "").rstrip("/")
+
+app = FastAPI(
+    title="University Rank Finder",
+    version="0.1.0",
+    root_path=ROOT_PATH,
+    docs_url=None,
+    redoc_url=None,
+)
 app.include_router(api_router)
 
 
@@ -24,10 +35,16 @@ def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
+def _openapi_url() -> str:
+    url = app.openapi_url or "/openapi.json"
+    return f"{ROOT_PATH}{url}" if ROOT_PATH else url
+
+
+@app.get("/docs", include_in_schema=False)
 @app.get("/docs/openapi", include_in_schema=False)
 def openapi_docs() -> HTMLResponse:
     return get_swagger_ui_html(
-        openapi_url=app.openapi_url,
+        openapi_url=_openapi_url(),
         title=f"{app.title} - OpenAPI",
     )
 
