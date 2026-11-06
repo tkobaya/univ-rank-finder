@@ -1,24 +1,23 @@
 # University Rank Finder
 
-RoR (Research Organization Registry) の大学データをベースに、QS・THE・ARWU の大学ランキングを
-収集・マッチングして一覧表示する FastAPI アプリです。
+**Languages:** English | [日本語](Readme-ja.md)
 
-## データソース
+A FastAPI application that collects QS, THE, and ARWU university rankings, matches them against university data from the Research Organization Registry (ROR), and displays the results.
 
-| ソース | バージョン管理 | 取得方法 |
-|--------|----------------|----------|
-| RoR | 公式ダンプ ZIP (例: `v2.11-2026-08-03-ror-data.zip`) | https://doi.org/10.5281/zenodo.6347574 からダウンロード |
-| QS | `QS{年度}` (例: QS2027) | QS 公式 Web API (cloudscraper 使用) |
-| THE | `THE{年度}` (例: THE2026) | THE 公式 JSON API |
-| ARWU | `ARWU{年度}` (例: ARWU2025) | shanghairanking.com 公式 API (`/api/pub/v1/arwu/rank?version={year}`) |
+## Data sources
 
-- バージョン・年度・公開日・取得件数は `data_sources` テーブルに記録され、`/api/stats` で確認できます。
-- QS は Cloudflare 対策のため `cloudscraper` でスクレイピングします。`--nid` は年版ごとに
-  `https://www.topuniversities.com/qs-world-university-rankings` のページソースから特定してください
-  (自動検出は現行ページ構造では失敗するため手動指定が必須です)。
-- QS のページングは 0 起点です (`page=0` が 1 位〜)。コレクタは自動で処理します。
+| Source | Version format | How data is obtained |
+|--------|----------------|----------------------|
+| ROR | Official dump ZIP (e.g. `v2.11-2026-08-03-ror-data.zip`) | Download from https://doi.org/10.5281/zenodo.6347574 |
+| QS | `QS{year}` (e.g. `QS2027`) | Official QS Web API (using `cloudscraper`) |
+| THE | `THE{year}` (e.g. `THE2026`) | Official THE JSON API |
+| ARWU | `ARWU{year}` (e.g. `ARWU2025`) | Official API at shanghairanking.com (`/api/pub/v1/arwu/rank?version={year}`) |
 
-## セットアップ
+- Dataset versions, years, publication dates, and record counts are stored in the `data_sources` table and available from `/api/stats`.
+- QS is scraped with `cloudscraper` to handle Cloudflare. The `--nid` value changes by edition and must be identified from the source of the relevant page at `https://www.topuniversities.com/qs-world-university-rankings` (automatic detection does not work with the current page structure).
+- QS pagination starts at zero (`page=0` contains the top-ranked entries); the collector handles pagination automatically.
+
+## Setup
 
 ```bash
 python -m venv .venv
@@ -26,156 +25,130 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
-RoR ダンプを `data/v2.11-2026-08-03-ror-data.zip` として配置します。
+Place the ROR dump at `data/v2.11-2026-08-03-ror-data.zip`.
 
-## 使い方
+## Usage
 
 ```bash
-# RoR データベース投入 (Education 組織のみ 26,837 件)
+# Import ROR data (education organizations only; 26,837 records)
 python -m scripts.collect ror --file data/v2.11-2026-08-03-ror-data.zip
 
-# QS ランキング取得 (nid は年版ごとの数字を指定)
+# Collect QS rankings (specify the edition-specific nid)
 python -m scripts.collect qs --year 2027 --nid 4153156
 
-# QS をローカルの CSV から投入 (例: Kaggle ダウンロード)
+# Import QS data from a local CSV file (e.g. downloaded from Kaggle)
 python -m scripts.collect qs-file --file path/to/qs.csv --year 2027
 
-# THE ランキング取得
+# Collect THE rankings
 python -m scripts.collect the --year 2026
 
-# ARWU ランキング取得 (上位 1000 校、最新版は 2025)
+# Collect ARWU rankings (top 1,000; latest available edition is 2025)
 python -m scripts.collect arwu --year 2025
 
-# 大学名マッチング実行 (RoR との対応付け)
+# Match university names against ROR
 python -m scripts.collect match
 
-# 統計表示
+# Show statistics
 python -m scripts.collect stats
 
-# 上記を一括実行
+# Run all of the above
 python -m scripts.collect all
 ```
 
-サーバー起動:
+Start the server:
 
 ```bash
 uvicorn app.main:app --port 8000
 ```
 
-Web UI: http://127.0.0.1:8000/
+Web UI: http://127.0.0.1:8000/<br>
 API: `/api/stats`, `/api/rankings`, `/api/universities`, `/api/countries`
 
-### 依存関係のバージョン管理と Docker
+### Dependency versions and Docker
 
-直接依存と、FastAPI の主要な依存先 (Starlette / Pydantic) は `pyproject.toml` で固定しています。
-間接依存は固定していないため、クリーンインストール間で完全に同じ依存ツリーになる保証はありません。
-依存バージョンを変更したときはテストを実行してください。
+Direct dependencies and FastAPI's main dependencies (Starlette and Pydantic) are pinned in `pyproject.toml`. Transitive dependencies are not pinned, so clean installs are not guaranteed to resolve to exactly the same dependency tree. Run the tests whenever dependency versions are changed.
 
-Docker は `pyproject.toml` から依存をインストールし、非rootユーザーで起動します。
-Docker Compose の `APP_UID` / `APP_GID` は既定で `1000` です。`data/` の所有者と異なる環境では、
-そのディレクトリの所有者に合わせて両変数を設定してからビルドしてください。`app/` と `static/` は
-読み取り専用でマウントされ、コンテナのroot filesystemも読み取り専用です。Uvicornの同時処理数も100に制限します。
+Docker installs dependencies from `pyproject.toml` and runs as a non-root user. Docker Compose defaults `APP_UID` and `APP_GID` to `1000`. If these do not match the owner of `data/`, set both variables to the directory owner's IDs before building. The `app/` and `static/` directories are mounted read-only, and the container root filesystem is read-only. Uvicorn's concurrency is limited to 100 requests.
 
-## マッチャーの仕組み
+## How matching works
 
-`python -m scripts.collect match` は、ランキングの大学名 (QS/THE/ARWU) を ROR の大学に
-対応付けます (`app/collectors/matcher.py`)。各 ROR 組織は表示名に加えて別名 (alias)・略称
-(acronym)・ラベルを含む**全表記** (search_names) を持ち、これを検索対象にします。例えば
-ARWU の `"University of Munich"` が ROR の `"Ludwig-Maximilians-Universität München"` に
-一致するのは、ROR レコードの aliases に `University of Munich` が含まれているためです。
+`python -m scripts.collect match` matches university names in QS/THE/ARWU rankings to ROR universities (`app/collectors/matcher.py`). Each ROR organization has searchable names consisting of its display name, aliases, acronyms, and labels. For example, ARWU's `University of Munich` matches ROR's `Ludwig-Maximilians-Universität München` because the ROR record includes `University of Munich` as an alias.
 
-### 1. 名前の正規化 (`normalize_name`)
+### 1. Name normalization (`normalize_name`)
 
-ランキング側と ROR 側の双方に適用し、表記ゆれを吸収します。
+Normalization is applied to both ranking names and ROR names to account for spelling variations.
 
-- **逆順表記の並べ替え**: `"Essex, University of"` → `"University of Essex"`
-- **Unicode 正規化 (NFKD) + 結合文字除去**: `é→e`, `ü→u`, `ō→o`
-- **アポストロフィ**: 角括弧 `'` `’` を除去 (`Queen's→Queens`, `Chang'an→Changan`)
-- **トルコ文字**: 点なし `ı→i`, `İ→I` (`Fırat→Firat`, `İstanbul→Istanbul`)
-- **`&` 展開**: `& → and`
-- **括弧除去**: `(VIT)` などを削除
-- **州立大学システム名の展開 (SUNY)**: `SUNY` は State University of New York (ニューヨーク州立大学) の
-  略称で、ランキングでは `"SUNY Stony Brook"` のように使われますが ROR は
-  `"Stony Brook University, State University of New York"` とフル表記です。そこで
-  照合前に `SUNY → "state university of new york"` へ展開し、両者を同じトークン列に揃えます。
-- **種別語の表記ゆれ統一**: `University` / `College` / `Institute` / `School` / `Technology` という
-  「機関の種別を表す語」は、言語・省略形によって見た目が異なります。すべて正規化前に
-  **英語の代表形へ揃えます**。例:
-  - `univ.`, `Universität` (独), `Université` (仏), `Universidad` (西), `Universidade` (葡),
-    `universitesi` (トルコ語), `universitet` (北欧・露) → `university`
-  - `inst.`, `institut` (独), `instituto` (西) → `institute`
+- **Reordering inverted names**: `Essex, University of` → `University of Essex`
+- **Unicode normalization (NFKD) and combining-mark removal**: `é→e`, `ü→u`, `ō→o`
+- **Apostrophes**: straight and curly apostrophes are removed (`Queen's→Queens`, `Chang'an→Changan`)
+- **Turkish characters**: dotless `ı→i`, `İ→I` (`Fırat→Firat`, `İstanbul→Istanbul`)
+- **Expanding `&`**: `& → and`
+- **Removing parenthetical text**: e.g. `(VIT)`
+- **Expanding state university system names (SUNY)**: `SUNY` is an abbreviation for State University of New York. Rankings may say `SUNY Stony Brook`, while ROR uses the full name `Stony Brook University, State University of New York`. Before matching, `SUNY` is expanded to `state university of new york` so both names have the same token sequence.
+- **Normalizing institution-type terms**: Terms such as `University`, `College`, `Institute`, `School`, and `Technology` vary by language and abbreviation. They are normalized to representative English forms before matching. Examples:
+  - `univ.`, `Universität` (German), `Université` (French), `Universidad` (Spanish), `Universidade` (Portuguese), `universitesi` (Turkish), `universitet` (Nordic/Slavic) → `university`
+  - `inst.`, `institut` (German), `instituto` (Spanish) → `institute`
   - `coll.` → `college`
-  - `tech`, `technische` (独), `technika` → `technology`
-  
-  これにより、種別語以外が同じ大学は別言語表記でも一致します。例:
-  - `"Universität Duisburg-Essen"` (独) と `"University of Duisburg-Essen"` (英) はどちらも
-    `university duisburg essen` に正規化され、完全一致します
-  - 逆に `"Université de Bretagne Occidentale"` (仏) と `"University of Western Brittany"` (英) は
-    種別語の `university` は揃いますが、地名 `Bretagne Occidentale` / `Western Brittany` は
-    別言語の訳語のため一致しません (訳語の翻訳は本ツールの対象外)。
-- **ストップワード除去**: `of, the, and, de, der, le, la, van, von, di, el, o` など
+  - `tech`, `technische` (German), `technika` → `technology`
 
-### 2. 国名の解決 (`CountryIndex`)
+  This lets names match across languages when the non-type terms are the same. For example, `Universität Duisburg-Essen` and `University of Duisburg-Essen` both normalize to `university duisburg essen` and match exactly. By contrast, `Université de Bretagne Occidentale` and `University of Western Brittany` do not match: although the type term is normalized, the place names are translations of each other, which this tool does not translate.
+- **Removing stop words**: terms such as `of, the, and, de, der, le, la, van, von, di, el, o`
 
-ランキングの国名表記を ISO 3166-1 alpha-2 コードに解決し、一致候補の絞り込みに使います
-(例: `UK→GB`, `Turkey/Türkiye→TR`, `China-Hong Kong→HK`, `China-Taiwan→TW`)。
-ROR の国名から自動構築 + 別名テーブル (`COUNTRY_ALIASES`) で補完します。
+### 2. Country resolution (`CountryIndex`)
 
-### 3. 事前インデックス
+Ranking country names are resolved to ISO 3166-1 alpha-2 codes to narrow matching candidates (e.g. `UK→GB`, `Turkey/Türkiye→TR`, `China-Hong Kong→HK`, `China-Taiwan→TW`). The index is built from ROR country names and supplemented by `COUNTRY_ALIASES`.
 
-全 ROR 大学から次の辞書を構築します。
+### 3. Prebuilt indexes
 
-- `_name_index`: 正規化名 → 大学リスト
-- `_token_index`: トークン → 大学 ID 集合 (候補の絞り込み用)
-- `_acronym_index`: 正規化略称 → 大学 ID リスト
+The matcher builds these indexes from all ROR universities:
 
-### 4. 一致段階 (先に成功した段階で確定)
+- `_name_index`: normalized name → universities
+- `_token_index`: token → set of university IDs (for narrowing candidates)
+- `_acronym_index`: normalized acronym → list of universities
 
-`match(org_name, country)` は以下の順で試みます。
+### 4. Matching stages
 
-| 段階 | 条件 | 例 |
-|------|------|-----|
-| **完全一致** | 正規化名が完全に一致 | `"Harvard University"` |
-| **トークン集合一致** | 語順が違うだけ | `"Ulster University"` ↔ `"University of Ulster"` |
-| **略称** | 略称 + 種別語のみ | `"HSE University"` (ROR acronym `HSE`) |
-| **略称+都市 (ファジー)** | 略称が単一組織に解決し、0.85 以上で類似 | `"LMU Munich"`, `"ETH Zurich"` |
-| **接頭辞包含** | 片方が他方のトークン接頭辞。トークン数差が最小の候補を優先 | `"University of Canterbury \| Te Whare Wānanga o Waitaha"` ↔ `"University of Canterbury"` |
-| **ファジー一致** | SequenceMatcher 類似度 0.90 以上 | スペル揺れ・表記差 |
+`match(org_name, country)` tries the following stages in order and stops at the first successful stage.
 
-国コードが解決できた場合、各段階の候補は `country_code` が一致するものに絞られます
-(例: `"Gordon College"` のフィリピン/米国判別)。
+| Stage | Condition | Example |
+|-------|-----------|---------|
+| **Exact match** | Normalized names are identical | `Harvard University` |
+| **Token-set match** | Only the word order differs | `Ulster University` ↔ `University of Ulster` |
+| **Acronym** | Acronym plus institution type only | `HSE University` (ROR acronym `HSE`) |
+| **Acronym + city (fuzzy)** | Acronym resolves to one organization and similarity is at least 0.85 | `LMU Munich`, `ETH Zurich` |
+| **Prefix containment** | One side's tokens are a prefix of the other; the smallest token-count difference is preferred | `University of Canterbury \| Te Whare Wānanga o Waitaha` ↔ `University of Canterbury` |
+| **Fuzzy match** | `SequenceMatcher` similarity is at least 0.90 | Spelling and formatting variations |
 
-### 5. 結果ステータス
+When a country code can be resolved, candidates at each stage are restricted to that country (e.g. to distinguish Gordon Colleges in the Philippines and the United States).
 
-- **`matched`**: 一意に一致
-- **`ambiguous`**: 同点候補が複数あり判定不能 (例: `"Gordon College"` を国なしで照合、
-  `"Vietnam National University (Ho Chi Minh City)"` の括弧除去後)
-- **`unmatched`**: 閾値に達する候補なし
+### 5. Match statuses
 
-### 現在の一致率
+- **`matched`**: a unique match was found
+- **`ambiguous`**: multiple candidates tie (e.g. `Gordon College` without a country, or after parenthetical text is removed from `Vietnam National University (Ho Chi Minh City)`)
+- **`unmatched`**: no candidate met the threshold
 
-QS 2027 (1,504) + THE 2026 (3,118) + ARWU 2025 (1,000) = 5,622 件中 **約 5,400 件 (96%)** が一致。
-残る未一致の多くは ROR 名と大きく異なる別名 (例: ドイツの `University of Mainz` ↔
-ROR `Johannes Gutenberg-Universität Mainz`) です。
+### Current match rate
 
-## テスト
+About **5,400 of 5,622 records (96%)** match across QS 2027 (1,504), THE 2026 (3,118), and ARWU 2025 (1,000). Many remaining unmatched names differ substantially from their ROR names, such as `University of Mainz` versus `Johannes Gutenberg-Universität Mainz`.
+
+## Tests
 
 ```bash
 python -m pytest tests/ -q
 ```
 
-マッチャーのテストは `tests/test_matcher.py` にあります (正規化・各一致段階・国別判別・ambiguous 判定)。
+Matcher tests are in `tests/test_matcher.py` and cover normalization, matching stages, country disambiguation, and ambiguous matches.
 
-## ディレクトリ構成
+## Project structure
 
 ```
-app/collectors/ror.py     ROR ダンプのパース
-app/collectors/qs.py      QS API 収集・CSV 取込
-app/collectors/the.py     THE API 収集
-app/collectors/arwu.py    ARWU API 収集
-app/collectors/matcher.py 大学名マッチング
-app/services.py           マッチング結果・DataSource 管理の DB 投入
-app/api.py                統計・一覧 API
+app/collectors/ror.py     Parse ROR dumps
+app/collectors/qs.py      Collect QS data and import CSV files
+app/collectors/the.py     Collect THE data
+app/collectors/arwu.py    Collect ARWU data
+app/collectors/matcher.py Match university names
+app/services.py           Persist matches and data-source metadata
+app/api.py                Statistics and listing APIs
 scripts/collect.py        CLI
 static/index.html         Web UI
 ```
