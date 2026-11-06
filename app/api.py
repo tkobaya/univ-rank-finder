@@ -320,32 +320,40 @@ def get_university(
     "/ror/search",
     summary="Search ROR Universities",
     description=(
-        "Searches ROR universities by partial name. Matches the display name and aliases, ranks the results "
-        "by relevance (exact name, prefix, alias, substring) and returns the ROR ID and the matched spelling. "
+        "Searches ROR universities by partial name. Matches the display name, aliases, acronyms, and labels, "
+        "ranks the results by relevance, and returns the ROR ID and the matched spelling. "
         "Intended to power a ROR ID picker / validator for university name input."
     ),
 )
 def search_ror(
-    q: str = Query(..., min_length=1, description="Partial match on ROR university name or alias"),
+    q: str = Query(..., min_length=1, description="Partial match on ROR university name, alias, acronym, or label"),
     country: str | None = Query(default=None, description="ROR country name for exact-match filtering"),
     limit: int = Query(default=20, ge=1, le=100, description="Number of results to return (1-100)"),
     db: Session = Depends(get_db),
 ):
     nq = normalize_name(q)
-    stmt = select(University).where(
-        (University.name.ilike(f"%{q}%"))
-        | (cast(University.aliases, String).ilike(f"%{q}%"))
-        | (cast(University.acronyms, String).ilike(f"%{q}%"))
-    )
+    stmt = select(University)
+    if q.isascii():
+        stmt = stmt.where(
+            (University.name.ilike(f"%{q}%"))
+            | (cast(University.aliases, String).ilike(f"%{q}%"))
+            | (cast(University.acronyms, String).ilike(f"%{q}%"))
+            | (cast(University.labels, String).ilike(f"%{q}%"))
+        )
     if country:
         stmt = stmt.where(University.country == country)
-    rows = db.execute(stmt.limit(500)).scalars().all()
+    # SQLite JSON text escapes non-ASCII characters, so Japanese queries cannot
+    # be prefiltered against aliases/labels in SQL. Scan those candidates in Python.
+    if q.isascii():
+        stmt = stmt.limit(500)
+    rows = db.execute(stmt).scalars().all()
 
     scored = []
     for u in rows:
         name_n = normalize_name(u.name)
         aliases_n = [normalize_name(a) for a in u.aliases or []]
         acronyms_n = [normalize_name(a) for a in u.acronyms or []]
+        labels_n = [normalize_name(label) for label in u.labels or []]
 
         if nq and name_n == nq:
             score, matched = 0, u.name
@@ -353,20 +361,36 @@ def search_ror(
             score, matched = 1, (u.aliases or [])[aliases_n.index(nq)]
         elif nq and nq in acronyms_n:
             score, matched = 1, (u.acronyms or [])[acronyms_n.index(nq)]
+        elif nq and nq in labels_n:
+            score, matched = 1, (u.labels or [])[labels_n.index(nq)]
         elif nq and name_n.startswith(nq):
             score, matched = 2, u.name
         elif nq and any(a.startswith(nq) for a in aliases_n):
             score, matched = 3, (u.aliases or [])[next(i for i, a in enumerate(aliases_n) if a.startswith(nq))]
         elif nq and any(a.startswith(nq) for a in acronyms_n):
             score, matched = 3, (u.acronyms or [])[next(i for i, a in enumerate(acronyms_n) if a.startswith(nq))]
+        elif nq and any(label.startswith(nq) for label in labels_n):
+            score, matched = 3, (u.labels or [])[next(i for i, label in enumerate(labels_n) if label.startswith(nq))]
         elif nq and nq in name_n:
             score, matched = 4, u.name
         elif nq and any(nq in a for a in aliases_n):
             score, matched = 5, (u.aliases or [])[next(i for i, a in enumerate(aliases_n) if nq in a)]
-        elif q.lower() in u.name.lower():
-            score, matched = 6, u.name
+        elif nq and any(nq in label for label in labels_n):
+            score, matched = 5, (u.labels or [])[next(i for i, label in enumerate(labels_n) if nq in label)]
         else:
-            continue
+            q_folded = q.casefold()
+            raw_names = [u.name, *(u.aliases or []), *(u.acronyms or []), *(u.labels or [])]
+            raw_matches = [name for name in raw_names if q_folded in name.casefold()]
+            if not raw_matches:
+                continue
+            matched = min(
+                raw_matches,
+                key=lambda name: (
+                    0 if name.casefold() == q_folded else 2 if name.casefold().startswith(q_folded) else 5,
+                    len(name),
+                ),
+            )
+            score = 0 if matched.casefold() == q_folded else 2 if matched.casefold().startswith(q_folded) else 5
         scored.append((score, len(matched), u.name.lower(), u, matched))
 
     scored.sort(key=lambda x: (x[0], x[1], x[2]))

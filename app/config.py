@@ -4,7 +4,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "university_rankings.db"
 
-DEFAULT_ROR_ZIP = DATA_DIR / "v2.11-2026-08-03-ror-data.zip"
+DEFAULT_ROR_ZIP = DATA_DIR / "v2.15-2026-10-20-ror-data.zip"
 
 QS_PAGE_URL = "https://www.topuniversities.com/world-university-rankings"
 QS_ENDPOINT_URL = "https://www.topuniversities.com/rankings/endpoint"

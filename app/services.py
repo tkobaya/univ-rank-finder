@@ -18,17 +18,42 @@ def _upsert_datasource(
     source_url: str | None = None,
     published_at: str | None = None,
     notes: str | None = None,
+    replace_version: bool = False,
 ) -> DataSource:
-    row = db.execute(
-        select(DataSource).where(
-            DataSource.name == name,
-            DataSource.version == version,
-            DataSource.year == year,
+    if replace_version:
+        rows = db.execute(
+            select(DataSource)
+            .where(DataSource.name == name)
+            .order_by(DataSource.imported_at.desc())
+        ).scalars().all()
+        row = next(
+            (item for item in rows if item.version == version and item.year == year),
+            None,
         )
-    ).scalar_one_or_none()
+        if row is None:
+            row = next((item for item in rows if item.year == year), None)
+        if row is None and rows:
+            row = rows[0]
+        for duplicate in rows:
+            if duplicate is not row:
+                db.delete(duplicate)
+        # Clear any conflicting historical version before changing the keeper's version.
+        if rows:
+            db.flush()
+    else:
+        row = db.execute(
+            select(DataSource).where(
+                DataSource.name == name,
+                DataSource.version == version,
+                DataSource.year == year,
+            )
+        ).scalar_one_or_none()
     if row is None:
         row = DataSource(name=name, version=version, year=year)
         db.add(row)
+    else:
+        row.version = version
+        row.year = year
     row.record_count = record_count
     row.source_url = source_url or row.source_url
     row.published_at = published_at or row.published_at
@@ -77,6 +102,7 @@ def import_ror(db: Session, zip_path: str, version_hint: str | None = None) -> d
         source_url=f"https://doi.org/10.5281/zenodo.6347574",
         published_at=published,
         notes="ROR data dump (education organizations only)",
+        replace_version=True,
     )
     db.commit()
     return {"version": version, "universities": len(universities), "created": created, "updated": updated}
