@@ -132,6 +132,10 @@ def test_empty_source_and_match_status_filters_are_ignored(db):
         client = TestClient(app)
         assert client.get("/api/universities?source=").status_code == 200
         assert client.get("/api/rankings?source=&match_status=").status_code == 200
+        assert client.get("/api/universities?limit=-1").status_code == 422
+        assert client.get("/api/rankings?offset=-1").status_code == 422
+        assert client.get("/api/universities?offset=1000001").status_code == 422
+        assert client.get("/api/ror/search", params={"q": "x" * 201}).status_code == 422
     finally:
         if previous_override is None:
             app.dependency_overrides.pop(get_db, None)

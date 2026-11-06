@@ -208,7 +208,7 @@ function rankBadge(rankings, source) {
   const rows = rankings.filter((r) => r.source === source);
   if (!rows.length) return '<span class="muted">-</span>';
   return rows.map((r) =>
-    `<span class="badge ${source}">${source.toUpperCase()} ${r.year}</span> <span class="rank-num">${r.rank_display || "?"}</span>`
+    `<span class="badge ${escapeHtml(source)}">${escapeHtml(source.toUpperCase())} ${escapeHtml(r.year)}</span> <span class="rank-num">${escapeHtml(r.rank_display || "?")}</span>`
   ).join("<br>");
 }
 
@@ -229,16 +229,20 @@ async function loadUniversities() {
     body.innerHTML = "";
     d.items.forEach((u, i) => {
       const tr = document.createElement("tr");
-      const rorLink = `<a href="https://ror.org/${u.ror_id}" target="_blank" rel="noopener">${escapeHtml(u.name)}</a>`;
+      const rorHref = safeRorUrl(u.ror_id);
+      const rorLink = rorHref
+        ? `<a href="${escapeHtml(rorHref)}" target="_blank" rel="noopener noreferrer">${escapeHtml(u.name)}</a>`
+        : escapeHtml(u.name);
+      const website = safeHttpUrl(u.website);
       tr.innerHTML = `
         <td>${state.uniPage * state.pageSize + i + 1}</td>
         <td>${rorLink}</td>
-        <td><a class="ror-id" href="https://ror.org/${escapeHtml(u.ror_id)}" target="_blank" rel="noopener">ror.org/${escapeHtml(u.ror_id)}</a><button class="copy-btn" data-copy="${escapeHtml(u.ror_id)}">Copy</button></td>
+        <td>${rorHref ? `<a class="ror-id" href="${escapeHtml(rorHref)}" target="_blank" rel="noopener noreferrer">ror.org/${escapeHtml(u.ror_id)}</a>` : `<span class="ror-id">${escapeHtml(u.ror_id)}</span>`}<button class="copy-btn" data-copy="${escapeHtml(u.ror_id)}">Copy</button></td>
         <td>${escapeHtml(u.country || "-")}</td>
         <td>${rankBadge(u.rankings, "qs")}</td>
         <td>${rankBadge(u.rankings, "the")}</td>
         <td>${rankBadge(u.rankings, "arwu")}</td>
-        <td>${u.website ? `<a href="${escapeHtml(u.website)}" target="_blank" rel="noopener">web</a>` : ""}</td>`;
+        <td>${website ? `<a href="${escapeHtml(website)}" target="_blank" rel="noopener noreferrer">web</a>` : ""}</td>`;
       body.appendChild(tr);
     });
     if (!d.items.length) body.innerHTML = '<tr><td colspan="8"><div class="empty">No results</div></td></tr>';
@@ -247,7 +251,7 @@ async function loadUniversities() {
     $("#uni-prev").disabled = state.uniPage === 0;
     $("#uni-next").disabled = (state.uniPage + 1) * state.pageSize >= total;
   } catch (e) {
-    $("#uni-body").innerHTML = `<tr><td colspan="8" class="empty">Error: ${e.message}</td></tr>`;
+    $("#uni-body").innerHTML = `<tr><td colspan="8" class="empty">Error: ${escapeHtml(e.message)}</td></tr>`;
   } finally {
     $("#loading").style.display = "none";
     $("#panel-universities").style.display = "block";
@@ -271,11 +275,15 @@ async function loadRankings() {
     body.innerHTML = "";
     d.items.forEach((r) => {
       const tr = document.createElement("tr");
+      const rorHref = r.university ? safeRorUrl(r.university.ror_id) : null;
+      const universityName = r.university && rorHref
+        ? `<a href="${escapeHtml(rorHref)}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.org_name)}</a>`
+        : escapeHtml(r.org_name);
       tr.innerHTML = `
-        <td><span class="badge ${r.source}">${r.source.toUpperCase()}</span></td>
-        <td>${r.year}</td>
+        <td><span class="badge ${escapeHtml(r.source)}">${escapeHtml(String(r.source).toUpperCase())}</span></td>
+        <td>${escapeHtml(r.year)}</td>
         <td class="rank-num">${escapeHtml(r.rank_display)}</td>
-        <td>${r.university ? `<a href="https://ror.org/${r.university.ror_id}" target="_blank" rel="noopener">${escapeHtml(r.org_name)}</a>` : escapeHtml(r.org_name)}</td>
+        <td>${universityName}</td>
         <td>${escapeHtml(r.country || "-")}</td>
         <td>${escapeHtml(r.score || "-")}</td>
         <td>${r.university ? `✓ ${escapeHtml(r.university.name)}` : `<span class="muted">${escapeHtml(r.match_status)}</span>`}</td>`;
@@ -287,7 +295,7 @@ async function loadRankings() {
     $("#rank-prev").disabled = state.rankPage === 0;
     $("#rank-next").disabled = (state.rankPage + 1) * state.pageSize >= total;
   } catch (e) {
-    $("#rank-body").innerHTML = `<tr><td colspan="7" class="empty">Error: ${e.message}</td></tr>`;
+    $("#rank-body").innerHTML = `<tr><td colspan="7" class="empty">Error: ${escapeHtml(e.message)}</td></tr>`;
   } finally {
     $("#loading").style.display = "none";
     $("#panel-rankings").style.display = "block";
@@ -312,9 +320,10 @@ async function loadRor() {
     d.items.forEach((u) => {
       const tr = document.createElement("tr");
       const alias = u.matched_name && u.matched_name !== u.name ? u.matched_name : "-";
+      const rorHref = safeRorUrl(u.ror_id);
       tr.innerHTML = `
-        <td><a href="https://ror.org/${escapeHtml(u.ror_id)}" target="_blank" rel="noopener">${escapeHtml(u.name)}</a></td>
-        <td><a href="https://ror.org/${escapeHtml(u.ror_id)}" target="_blank" rel="noopener">${escapeHtml(u.ror_id)}</a></td>
+        <td>${rorHref ? `<a href="${escapeHtml(rorHref)}" target="_blank" rel="noopener noreferrer">${escapeHtml(u.name)}</a>` : escapeHtml(u.name)}</td>
+        <td>${rorHref ? `<a href="${escapeHtml(rorHref)}" target="_blank" rel="noopener noreferrer">${escapeHtml(u.ror_id)}</a>` : escapeHtml(u.ror_id)}</td>
         <td>${escapeHtml(alias)}</td>
         <td>${escapeHtml(u.country || "-")}${u.country_code ? ` <span class="muted">(${escapeHtml(u.country_code)})</span>` : ""}</td>`;
       body.appendChild(tr);
@@ -322,7 +331,7 @@ async function loadRor() {
     if (!d.items.length) body.innerHTML = '<tr><td colspan="4"><div class="empty">No results</div></td></tr>';
     $("#ror-info").textContent = `${d.total} candidates`;
   } catch (e) {
-    $("#ror-body").innerHTML = `<tr><td colspan="4" class="empty">Error: ${e.message}</td></tr>`;
+    $("#ror-body").innerHTML = `<tr><td colspan="4" class="empty">Error: ${escapeHtml(e.message)}</td></tr>`;
   } finally {
     $("#loading").style.display = "none";
     $("#panel-ror").style.display = "block";
@@ -370,6 +379,20 @@ document.querySelectorAll("thead").forEach((h) => h.addEventListener("click", on
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function safeHttpUrl(value) {
+  try {
+    const url = new URL(String(value ?? ""));
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeRorUrl(value) {
+  const id = String(value ?? "");
+  return /^[0-9a-z]{9}$/i.test(id) ? `https://ror.org/${id}` : null;
 }
 
 $("#uni-body").addEventListener("click", async (e) => {

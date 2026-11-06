@@ -38,7 +38,7 @@ FastAPI アプリの HTTP API。ベース URL は `http://127.0.0.1:8000`。
 ### ページング
 
 - `limit`: 1〜1000 (デフォルト: `/api/rankings`=100, `/api/universities`=200)
-- `offset`: 0 起点 (デフォルト 0)
+- `offset`: 0〜1,000,000 (デフォルト 0)
 - レスポンスの `total` はフィルタ適用後・ページング前の件数
 
 ### ソートと未順位 (NULL) の扱い
@@ -108,14 +108,14 @@ curl http://127.0.0.1:8000/api/stats
 |-----------|-----|------|------|
 | `source` | str | — | `qs` / `the` / `arwu` で絞り込み |
 | `year` | int | — | 年度で絞り込み (空文字は無視) |
-| `q` | str | — | `org_name` の部分一致 (大小無視) |
+| `q` | str | — | `org_name` の部分一致 (大小無視、最大200文字) |
 | `country` | str | — | 国名の完全一致 |
 | `match_status` | str | — | `matched` / `unmatched` / `ambiguous` |
 | `matched_only` | bool | `false` | true で matched のみ |
 | `sort` | str | `source` | `source` / `year` / `rank` / `org_name` / `country` / `score` / `match_status` |
 | `order` | str | `asc` | `asc` / `desc` |
 | `limit` | int | `100` | 1〜1000 |
-| `offset` | int | `0` | — |
+| `offset` | int | `0` | 0〜1,000,000 |
 
 ```bash
 curl "http://127.0.0.1:8000/api/rankings?source=arwu&sort=rank&order=asc&limit=5"
@@ -164,7 +164,7 @@ ROR 大学の一覧。各大学に一致したランキングを同梱する。
 
 | パラメータ | 型 | 既定 | 説明 |
 |-----------|-----|------|------|
-| `q` | str | — | ROR 大学名・別名 (aliases) の部分一致 |
+| `q` | str | — | ROR 大学名・別名・略称・label の部分一致 (最大200文字) |
 | `country` | str | — | 国名の完全一致 |
 | `source` | str | — | `qs` / `the` / `arwu` でランキング絞り込み |
 | `year` | int | — | 年度で絞り込み (空文字は無視) |
@@ -172,7 +172,7 @@ ROR 大学の一覧。各大学に一致したランキングを同梱する。
 | `sort` | str | `name` | `name` / `country` / `rank` / `rank:qs` / `rank:the` / `rank:arwu` / `matches` |
 | `order` | str | `asc` | `asc` / `desc` |
 | `limit` | int | `200` | 1〜1000 |
-| `offset` | int | `0` | — |
+| `offset` | int | `0` | 0〜1,000,000 |
 
 `sort` の意味:
 
@@ -242,7 +242,7 @@ curl "http://127.0.0.1:8000/api/universities?matched_only=true&sort=rank:qs&orde
 
 - `total` は絞り込み (matched_only / source) 適用後の件数で、`offset`/`limit` はソート後に適用される。
 - `matched_only=false` (既定) ではランキング未一致の大学も返る。
-- `q` は `name` と `aliases` の両方を対象とする (SQLite で `cast(aliases, String)` を使用)。
+- `q` は `name`、`aliases`、`acronyms`、`labels` を対象とする。日本語などの検索では SQLite の `json_each` を使う。
 
 ---
 
@@ -296,7 +296,7 @@ RoR 大学のみを対象にした検索。ランキング情報は一切使わ�
 
 | パラメータ | 型 | 既定 | 説明 |
 |-----------|-----|------|------|
-| `q` | str | (必須) | 大学名・別名 (alias)・略称 (acronym) の部分一致。1 文字以上 |
+| `q` | str | (必須) | 大学名・別名 (alias)・略称 (acronym)・label の部分一致。1〜200文字 |
 | `country` | str | — | ROR の国名で完全一致絞り込み |
 | `limit` | int | `20` | 返す候補数 (1〜100) |
 

@@ -34,6 +34,18 @@ MatchStatusParam = Annotated[
 ]
 
 
+def _json_array_contains(column, pattern: str):
+    """SQLite's json_each decodes non-ASCII JSON text for searchable array values."""
+    values = func.json_each(column).table_valued("key", "value").alias()
+    return (
+        select(1)
+        .select_from(values)
+        .where(values.c.value.ilike(pattern))
+        .correlate(University)
+        .exists()
+    )
+
+
 @router.get(
     "/stats",
     summary="Statistics",
@@ -89,9 +101,13 @@ def stats(db: Session = Depends(get_db)):
     ),
 )
 def list_rankings(
-    source: str | None = Query(default=None, description="Ranking source (qs / the / arwu)"),
+    source: SourceParam = None,
     year: YearParam = None,
-    q: str | None = Query(default=None, description="Partial match on university name (org_name), case-insensitive"),
+    q: str | None = Query(
+        default=None,
+        max_length=200,
+        description="Partial match on university name (org_name), case-insensitive (max 200 characters)",
+    ),
     country: str | None = Query(default=None, description="Exact match on country name"),
     match_status: MatchStatusParam = None,
     matched_only: bool = Query(default=False, description="If true, return only rows with status `matched`"),
@@ -100,8 +116,8 @@ def list_rankings(
         description="Sort column. For `rank` / `score`, rows without a value (NULL) always sort last in both orders",
     ),
     order: Literal["asc", "desc"] = Query(default="asc", description="Sort order (asc / desc)"),
-    limit: int = Query(default=100, le=1000, description="Number of rows to return (1-1000)"),
-    offset: int = Query(default=0, description="Number of rows to skip (0-based)"),
+    limit: int = Query(default=100, ge=1, le=1000, description="Number of rows to return (1-1000)"),
+    offset: int = Query(default=0, ge=0, le=1_000_000, description="Number of rows to skip (0-1000000)"),
     db: Session = Depends(get_db),
 ):
     sort_map = {
@@ -178,7 +194,8 @@ def list_rankings(
 def list_universities(
     q: str | None = Query(
         default=None,
-        description="Partial match on ROR university name, aliases, acronyms, or labels (case-insensitive)",
+        max_length=200,
+        description="Partial match on ROR university name, aliases, acronyms, or labels (max 200 characters)",
     ),
     country: str | None = Query(default=None, description="Exact match on country name"),
     source: SourceParam = None,
@@ -192,33 +209,27 @@ def list_universities(
         ),
     ),
     order: Literal["asc", "desc"] = Query(default="asc", description="Sort order (asc / desc)"),
-    limit: int = Query(default=200, le=1000, description="Number of rows to return (1-1000)"),
-    offset: int = Query(default=0, description="Number of rows to skip (0-based)"),
+    limit: int = Query(default=200, ge=1, le=1000, description="Number of rows to return (1-1000)"),
+    offset: int = Query(default=0, ge=0, le=1_000_000, description="Number of rows to skip (0-1000000)"),
     db: Session = Depends(get_db),
 ):
     stmt = select(University)
     if q:
+        pattern = f"%{q}%"
+        name_match = University.name.ilike(pattern)
         if q.isascii():
-            stmt = stmt.where(
-                (University.name.ilike(f"%{q}%"))
-                | (cast(University.aliases, String).ilike(f"%{q}%"))
-                | (cast(University.acronyms, String).ilike(f"%{q}%"))
-                | (cast(University.labels, String).ilike(f"%{q}%"))
-            )
+            name_match |= cast(University.aliases, String).ilike(pattern)
+            name_match |= cast(University.acronyms, String).ilike(pattern)
+            name_match |= cast(University.labels, String).ilike(pattern)
+        else:
+            name_match |= _json_array_contains(University.aliases, pattern)
+            name_match |= _json_array_contains(University.acronyms, pattern)
+            name_match |= _json_array_contains(University.labels, pattern)
+        stmt = stmt.where(name_match)
     if country:
         stmt = stmt.where(University.country == country)
 
     uni_rows = db.execute(stmt).scalars().all()
-    if q and not q.isascii():
-        q_folded = q.casefold()
-        uni_rows = [
-            u
-            for u in uni_rows
-            if any(
-                q_folded in value.casefold()
-                for value in [u.name, *(u.aliases or []), *(u.acronyms or []), *(u.labels or [])]
-            )
-        ]
     ids = [u.id for u in uni_rows]
 
     # ランキングを一括ロードして結合
@@ -348,27 +359,30 @@ def get_university(
     ),
 )
 def search_ror(
-    q: str = Query(..., min_length=1, description="Partial match on ROR university name, alias, acronym, or label"),
+    q: str = Query(
+        ..., min_length=1, max_length=200,
+        description="Partial match on ROR university name, alias, acronym, or label (max 200 characters)",
+    ),
     country: str | None = Query(default=None, description="ROR country name for exact-match filtering"),
     limit: int = Query(default=20, ge=1, le=100, description="Number of results to return (1-100)"),
     db: Session = Depends(get_db),
 ):
     nq = normalize_name(q)
     stmt = select(University)
+    pattern = f"%{q}%"
+    name_match = University.name.ilike(pattern)
     if q.isascii():
-        stmt = stmt.where(
-            (University.name.ilike(f"%{q}%"))
-            | (cast(University.aliases, String).ilike(f"%{q}%"))
-            | (cast(University.acronyms, String).ilike(f"%{q}%"))
-            | (cast(University.labels, String).ilike(f"%{q}%"))
-        )
+        name_match |= cast(University.aliases, String).ilike(pattern)
+        name_match |= cast(University.acronyms, String).ilike(pattern)
+        name_match |= cast(University.labels, String).ilike(pattern)
+    else:
+        name_match |= _json_array_contains(University.aliases, pattern)
+        name_match |= _json_array_contains(University.acronyms, pattern)
+        name_match |= _json_array_contains(University.labels, pattern)
+    stmt = stmt.where(name_match)
     if country:
         stmt = stmt.where(University.country == country)
-    # SQLite JSON text escapes non-ASCII characters, so Japanese queries cannot
-    # be prefiltered against aliases/labels in SQL. Scan those candidates in Python.
-    if q.isascii():
-        stmt = stmt.limit(500)
-    rows = db.execute(stmt).scalars().all()
+    rows = db.execute(stmt.limit(500)).scalars().all()
 
     scored = []
     for u in rows:
