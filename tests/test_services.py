@@ -79,6 +79,96 @@ def test_import_ror_and_match(db):
     assert ds.record_count == 2
 
 
+def test_import_ror_updates_single_datasource_version(db, monkeypatch):
+    from app import services
+
+    db.add_all(
+        [
+            DataSource(name="ror", version="2.11-2026-08-03", year=None, record_count=26837),
+            DataSource(name="ror", version="2.15-2026-10-20", year=None, record_count=31140),
+        ]
+    )
+    db.commit()
+    monkeypatch.setattr(services, "parse_ror_dump", lambda _: ([], "2.16-2026-11-05"))
+
+    services.import_ror(db, "unused.zip")
+
+    rows = db.query(DataSource).filter_by(name="ror").all()
+    assert len(rows) == 1
+    assert rows[0].version == "2.16-2026-11-05"
+    assert rows[0].record_count == 0
+
+
+@pytest.mark.parametrize("query", ["東京", "東京科学大学"])
+def test_ror_search_matches_labels(db, query):
+    from app.api import search_ror
+
+    db.add(
+        University(
+            ror_id="05dqf9946",
+            name="Institute of Science Tokyo",
+            aliases=["Science Tokyo", "科学大"],
+            acronyms=["ISCT"],
+            labels=["Institute of Science Tokyo", "東京科学大学"],
+            country="Japan",
+        )
+    )
+    db.commit()
+
+    result = search_ror(q=query, country=None, limit=20, db=db)
+
+    assert result["total"] == 1
+    assert result["items"][0]["ror_id"] == "05dqf9946"
+    assert result["items"][0]["matched_name"] == "東京科学大学"
+
+
+def test_empty_source_and_match_status_filters_are_ignored(db):
+    from app.database import get_db
+    from app.main import app
+
+    previous_override = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = lambda: db
+    try:
+        client = TestClient(app)
+        assert client.get("/api/universities?source=").status_code == 200
+        assert client.get("/api/rankings?source=&match_status=").status_code == 200
+    finally:
+        if previous_override is None:
+            app.dependency_overrides.pop(get_db, None)
+        else:
+            app.dependency_overrides[get_db] = previous_override
+
+
+def test_university_list_search_matches_non_ascii_labels(db):
+    from app.database import get_db
+    from app.main import app
+
+    db.add(
+        University(
+            ror_id="05dqf9946",
+            name="Institute of Science Tokyo",
+            aliases=["Science Tokyo", "科学大"],
+            acronyms=["ISCT"],
+            labels=["Institute of Science Tokyo", "東京科学大学"],
+            country="Japan",
+        )
+    )
+    db.commit()
+
+    previous_override = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = lambda: db
+    try:
+        response = TestClient(app).get("/api/universities", params={"q": "東京科学大学"})
+        assert response.status_code == 200
+        assert response.json()["total"] == 1
+        assert response.json()["items"][0]["ror_id"] == "05dqf9946"
+    finally:
+        if previous_override is None:
+            app.dependency_overrides.pop(get_db, None)
+        else:
+            app.dependency_overrides[get_db] = previous_override
+
+
 def test_import_rankings_replaces_same_year(db):
     from app import services
 

@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BeforeValidator
@@ -20,6 +20,16 @@ def _empty_to_none(v):
 YearParam = Annotated[
     int | None,
     Query(description="Ranking edition year (e.g. 2026). An empty string is ignored"),
+    BeforeValidator(_empty_to_none),
+]
+SourceParam = Annotated[
+    Literal["qs", "the", "arwu"] | None,
+    Query(description="Ranking source (qs / the / arwu). An empty string is ignored"),
+    BeforeValidator(_empty_to_none),
+]
+MatchStatusParam = Annotated[
+    Literal["matched", "unmatched", "ambiguous"] | None,
+    Query(description="ROR matching status. An empty string is ignored"),
     BeforeValidator(_empty_to_none),
 ]
 
@@ -83,16 +93,13 @@ def list_rankings(
     year: YearParam = None,
     q: str | None = Query(default=None, description="Partial match on university name (org_name), case-insensitive"),
     country: str | None = Query(default=None, description="Exact match on country name"),
-    match_status: str | None = Query(
-        default=None, choices=["matched", "unmatched", "ambiguous"], description="ROR matching status"
-    ),
+    match_status: MatchStatusParam = None,
     matched_only: bool = Query(default=False, description="If true, return only rows with status `matched`"),
-    sort: str = Query(
+    sort: Literal["source", "year", "rank", "org_name", "country", "score", "match_status"] = Query(
         default="source",
-        choices=["source", "year", "rank", "org_name", "country", "score", "match_status"],
         description="Sort column. For `rank` / `score`, rows without a value (NULL) always sort last in both orders",
     ),
-    order: str = Query(default="asc", choices=["asc", "desc"], description="Sort order"),
+    order: Literal["asc", "desc"] = Query(default="asc", description="Sort order (asc / desc)"),
     limit: int = Query(default=100, le=1000, description="Number of rows to return (1-1000)"),
     offset: int = Query(default=0, description="Number of rows to skip (0-based)"),
     db: Session = Depends(get_db),
@@ -163,40 +170,55 @@ def list_rankings(
     summary="List Universities",
     description=(
         "Lists ROR universities with the rankings (QS / THE / ARWU) matched to each one. "
-        "Search by university name or alias, filter by country, source, or year, and optionally show only "
+        "Search by university name, alias, acronym, or label; filter by country, source, or year; and optionally show only "
         "universities that have a matched ranking (matched_only). `rank`-type sorts are based on the best rank "
         "within that source (universities without a rank always sort last)."
     ),
 )
 def list_universities(
-    q: str | None = Query(default=None, description="Partial match on ROR university name or aliases, case-insensitive"),
+    q: str | None = Query(
+        default=None,
+        description="Partial match on ROR university name, aliases, acronyms, or labels (case-insensitive)",
+    ),
     country: str | None = Query(default=None, description="Exact match on country name"),
-    source: str | None = Query(default=None, choices=["qs", "the", "arwu"], description="Only include rankings from this source"),
+    source: SourceParam = None,
     year: YearParam = None,
     matched_only: bool = Query(default=False, description="If true, return only universities with a matched ranking"),
-    sort: str = Query(
+    sort: Literal["name", "country", "rank", "rank:qs", "rank:the", "rank:arwu", "matches"] = Query(
         default="name",
-        choices=["name", "country", "rank", "rank:qs", "rank:the", "rank:arwu", "matches"],
         description=(
             "Sort key. `rank` = best rank across all sources; `rank:qs` / `rank:the` / `rank:arwu` = best rank "
             "within that source; `matches` = number of matched rankings"
         ),
     ),
-    order: str = Query(default="asc", choices=["asc", "desc"], description="Sort order"),
+    order: Literal["asc", "desc"] = Query(default="asc", description="Sort order (asc / desc)"),
     limit: int = Query(default=200, le=1000, description="Number of rows to return (1-1000)"),
     offset: int = Query(default=0, description="Number of rows to skip (0-based)"),
     db: Session = Depends(get_db),
 ):
     stmt = select(University)
     if q:
-        stmt = stmt.where(
-            (University.name.ilike(f"%{q}%"))
-            | (cast(University.aliases, String).ilike(f"%{q}%"))
-        )
+        if q.isascii():
+            stmt = stmt.where(
+                (University.name.ilike(f"%{q}%"))
+                | (cast(University.aliases, String).ilike(f"%{q}%"))
+                | (cast(University.acronyms, String).ilike(f"%{q}%"))
+                | (cast(University.labels, String).ilike(f"%{q}%"))
+            )
     if country:
         stmt = stmt.where(University.country == country)
 
     uni_rows = db.execute(stmt).scalars().all()
+    if q and not q.isascii():
+        q_folded = q.casefold()
+        uni_rows = [
+            u
+            for u in uni_rows
+            if any(
+                q_folded in value.casefold()
+                for value in [u.name, *(u.aliases or []), *(u.acronyms or []), *(u.labels or [])]
+            )
+        ]
     ids = [u.id for u in uni_rows]
 
     # ランキングを一括ロードして結合
@@ -277,7 +299,7 @@ def list_universities(
 )
 def get_university(
     ror_id: Annotated[str, Path(description="ROR organization ID (e.g. 05591te55)")],
-    source: str | None = Query(default=None, choices=["qs", "the", "arwu"], description="Only include rankings from this source"),
+    source: SourceParam = None,
     year: YearParam = None,
     db: Session = Depends(get_db),
 ):
