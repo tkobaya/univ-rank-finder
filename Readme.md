@@ -21,8 +21,9 @@ RoR (Research Organization Registry) の大学データをベースに、QS・TH
 ## セットアップ
 
 ```bash
-python -m venv .venv && . .venv/bin/activate
-pip install -e .
+python -m venv .venv
+. .venv/bin/activate
+pip install -e ".[dev]"
 ```
 
 RoR ダンプを `data/v2.11-2026-08-03-ror-data.zip` として配置します。
@@ -63,6 +64,17 @@ uvicorn app.main:app --port 8000
 
 Web UI: http://127.0.0.1:8000/
 API: `/api/stats`, `/api/rankings`, `/api/universities`, `/api/countries`
+
+### 依存関係のバージョン管理と Docker
+
+直接依存と、FastAPI の主要な依存先 (Starlette / Pydantic) は `pyproject.toml` で固定しています。
+間接依存は固定していないため、クリーンインストール間で完全に同じ依存ツリーになる保証はありません。
+依存バージョンを変更したときはテストを実行してください。
+
+Docker は `pyproject.toml` から依存をインストールし、非rootユーザーで起動します。
+Docker Compose の `APP_UID` / `APP_GID` は既定で `1000` です。`data/` の所有者と異なる環境では、
+そのディレクトリの所有者に合わせて両変数を設定してからビルドしてください。`app/` と `static/` は
+読み取り専用でマウントされ、コンテナのroot filesystemも読み取り専用です。Uvicornの同時処理数も100に制限します。
 
 ## マッチャーの仕組み
 

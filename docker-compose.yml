@@ -1,12 +1,23 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
     ports:
       - "0.0.0.0:8005:8000"
     environment:
       - ROOT_PATH=${ROOT_PATH:-/webapp/univ-rank-finder}
     volumes:
-      - ./data:/app/data
-      - ./app:/app/app
-      - ./static:/app/static
+      - ./data:/app/data:rw
+      - ./app:/app/app:ro
+      - ./static:/app/static:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
