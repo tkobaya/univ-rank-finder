@@ -1,9 +1,11 @@
 __pycache__/
 *.pyc
 .venv/
+*.egg-info/ 
+.pytest_cache/
+
 data/*.zip
 data/*.json
 data/*.csv
 data/*.db
-.pytest_cache/
 deploy.sh
